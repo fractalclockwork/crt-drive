@@ -1,6 +1,8 @@
-# Link MC5 / Wyse WY-120 CRT Drive Replacement
+# crt-drive
 
-Replace the Link MC5 terminal CRT drive (Wyse 211009-02 ASIC U4) with a Raspberry Pi Pico (RP2040). The Pico synthesizes active-low `/HSYNC` and `/VSYNC` plus active-high dual video (V0 dim, V1 normal) and drives the existing deflection and neck boards. The original CPU, EPROM, and VRAM bus do not need to run.
+Programmable CRT drive: sync and video from a microcontroller for analog CRTs and TVs.
+
+The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberry Pi Pico (RP2040) replaces the CRT drive ASIC (Wyse 211009-02, U4): it synthesizes active-low `/HSYNC` and `/VSYNC` plus active-high dual video (V0 dim, V1 normal) and drives the existing deflection and neck boards. The original CPU, EPROM, and VRAM bus do not need to run.
 
 **Status:** Planning. [`CMakeLists.txt`](CMakeLists.txt) sketches a Pico SDK build (`main.c`, three `.pio` files). Those sources are not in the tree yet.
 
@@ -17,4 +19,3 @@ Replace the Link MC5 terminal CRT drive (Wyse 211009-02 ASIC U4) with a Raspberr
 ## Safety
 
 CRT anode and flyback voltages are lethal. Isolate U4 video and sync outputs before injecting RP2040 signals. Do not work on a powered chassis until you know the discharge path for the CRT anode cap.
-# crt-drive
