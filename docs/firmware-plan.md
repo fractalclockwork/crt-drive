@@ -4,6 +4,14 @@ RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
+## Handoff
+
+Planning for the Link MC5 / WY-120 first target is wrapped. Injection pads, level shift, GPIO map, and the 78 Hz timing table are in the hardware doc. Start firmware on a Pico SDK host at **phase 1** below; do not skip scope checks after phase 2.
+
+**Decided for v1:** pads V0/V1/H/V/GND, 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78 Hz first.
+
+**Still open:** three SMs vs combined timing SM; blanking (stall vs padded raster); measured confirmation of 78 Hz counts; 60 Hz timings.
+
 ## Architecture
 
 ```text
