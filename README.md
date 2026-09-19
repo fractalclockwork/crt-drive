@@ -4,7 +4,7 @@ Programmable CRT drive: sync and video from a microcontroller for analog CRTs an
 
 The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberry Pi Pico (RP2040) replaces the CRT drive ASIC (Wyse 211009-02, U4): it synthesizes active-low `/HSYNC` and `/VSYNC` plus active-high dual video (V0 dim, V1 normal) and drives the existing deflection and neck boards. The original CPU, EPROM, and VRAM bus do not need to run.
 
-**Status:** Hardware injection path is decided. Firmware is phased and not started yet (`main.c` / `.pio` not in the tree). The Pico SDK **Dev-Host** toolchain is Docker (`make smoke` / `make hello-test`); there is no Pi gateway — flash the Pico from this machine.
+**Status:** Injection pads and the Pico + 74AHCT125 carrier (KiCad protoboard) are decided. The Dev-Host Docker toolchain is validated (`make smoke` / `make hello-test`). CRT firmware is phased and not started (`main.c` / `.pio` not in the tree).
 
 ## Docs
 
@@ -14,7 +14,8 @@ The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberr
 | [Firmware plan](docs/firmware-plan.md) | Phased PIO / DMA / framebuffer build, open choices |
 | [Test patterns](docs/test-pattern-design.md) | Crosshatch, intensity, focus, full-on geometry (phase 5) |
 | [Toolchains](docs/toolchains.md) | Dev-Host Docker image, volume mount, USB flash (no gateway) |
-| [KiCad project](docs/kicad/crt-drive/) | Injector schematic and protoboard jumper layout |
+| [KiCad project](docs/kicad/crt-drive/) | Pico carrier / level-shift protoboard (schematic + jumper layout) |
+| [Injector power](docs/kicad/power_supply.md) | +5 V, VSYS Schottky, AHCT buffer rail |
 | [PCB drawing](docs/PCB.svg) | Board artwork referenced from the hardware guide |
 | [Signal pads](docs/signals_pcb.png) | Solder-side taps next to U4: V0, V1, V, H, GND |
 
@@ -36,7 +37,7 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](.devcon
 
 ## Phased development
 
-Hardware is ready to drive: lift harness at pads **V0**, **V1**, **V**, **H**, **GND**; level-shift with a 74AHCT125; power from logic-board +5 V / GND. First video mode is **78 Hz** (48.000 MHz dots, `/HSYNC` 31.356 kHz). **60 Hz** is optional later.
+Hardware is ready to drive: lift harness at pads **V0**, **V1**, **V**, **H**, **GND**; level-shift on the Pico carrier (74AHCT125); power from logic-board +5 V / GND. First video mode is **78 Hz** (48.000 MHz dots, `/HSYNC` 31.373 kHz, 78.041 Hz). **60 Hz** is optional later.
 
 Firmware order (detail and sketches in [firmware-plan.md](docs/firmware-plan.md)):
 

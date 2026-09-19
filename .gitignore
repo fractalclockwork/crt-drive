@@ -40,6 +40,10 @@ fp-info-cache
 _autosave-*
 *.lck
 
+# --- Python ---
+**/__pycache__/
+*.py[cod]
+
 # --- Ephemeral ---
 .tmp/
 .tmp.*

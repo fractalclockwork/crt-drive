@@ -6,9 +6,9 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-Planning for the Link MC5 / WY-120 first target is wrapped. Injection pads, level shift, GPIO map, and the 78 Hz timing table are in the hardware doc. Prove the Dev-Host container and USB Pico first (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)), then start CRT firmware at **phase 1** below (`make build`); do not skip scope checks after phase 2.
+The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pico carrier (74AHCT125), GPIO map, and the 78 Hz timing table are in the hardware doc. The Dev-Host container and USB Pico path are proven (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)). Start CRT firmware at **phase 1** below (`make build`); do not skip scope checks after phase 2.
 
-**Decided for v1:** pads V0/V1/H/V/GND, 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78 Hz first.
+**Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78.041 Hz first.
 
 **Still open:** three SMs vs combined timing SM; blanking (stall vs padded raster); measured confirmation of 78 Hz counts; 60 Hz timings.
 
@@ -84,9 +84,9 @@ Decide this in phase 3 so DMA length and PIO wait logic match.
 
 ### 2. Stable sync
 
-- [ ] /HSYNC: 31.356 kHz, active-low, 140-dot pulse (2.917 us)
-- [ ] /VSYNC: 78.0 Hz, active-low, 4-line pulse (0.128 ms)
-- [ ] Line period 31.875 us, frame period 12.820 ms
+- [ ] /HSYNC: 31.373 kHz, active-low, 140-dot pulse (2.917 us)
+- [ ] /VSYNC: 78.041 Hz, active-low, 4-line pulse (0.128 ms)
+- [ ] Line period 31.875 us, frame period 12.813 ms
 - [ ] Enable SMs in lockstep so VSYNC IRQ alignment is repeatable
 
 Sketch (`hsync.pio` / `vsync.pio`) — delays are placeholders; fix counts as noted above:
@@ -220,7 +220,7 @@ void init_crt_pio(PIO pio, uint pin_v0, uint pin_hsync, uint pin_vsync) {
 - [ ] Control channel: reload data-channel read address via `al3_read_addr_trig`
 - [ ] Start after clock + PIO init
 - [ ] TX FIFO stays non-empty (`fstat`); no underflow gaps on V0/V1
-- [ ] Stream repeats every 12.820 ms
+- [ ] Stream repeats every 12.813 ms
 - [ ] Active line ends cleanly before the /HSYNC pulse (depends on blanking choice in phase 3)
 
 ```c
@@ -345,17 +345,17 @@ On the CRT (after isolation and 5 V level shift):
 
 ### 6. Optional 60 Hz
 
-- [ ] Measure or look up 60 Hz porches (do not invent)
+- [ ] Measure 60 Hz porches (do not invent). Appendix B: 416 active lines, 59.999 Hz, same ~31.37 kHz H
 - [ ] Second timing table and PIO counts
-- [ ] Keep 78 Hz as the default
+- [ ] Keep 78.041 Hz as the default
 
 ## Scope / visual checklist
 
 | Check | Expected |
 | --- | --- |
-| /HSYNC | 31.356 kHz, active-low, ~2.917 us pulse |
-| /VSYNC | 78.0 Hz, active-low, 4 lines |
-| V0 / V1 | 2-bit stream, no FIFO holes, repeats every 12.82 ms |
+| /HSYNC | 31.373 kHz, active-low, ~2.917 us pulse |
+| /VSYNC | 78.041 Hz, active-low, 4 lines |
+| V0 / V1 | 2-bit stream, no FIFO holes, repeats every 12.813 ms |
 | Active line vs /HSYNC | Video ends before the sync pulse |
 | IC401 inputs | 0 V / +5 V matching the luminance table |
 | Screen | Four intensity levels; crosshatch on overscan bounds |
@@ -365,5 +365,5 @@ On the CRT (after isolation and 5 V level shift):
 1. Three PIO SMs vs combined timing SM (recommend three; CMake already assumes it).
 2. Pixel SM blanking: stall during retrace vs padded full-raster DMA.
 3. Confirm 78 Hz numbers on hardware before freezing PIO delays.
-4. 60 Hz timings TBD.
+4. 60 Hz porches TBD (Appendix B has active size and rates only).
 5. Factory-key pattern switching is optional UI, not v1.

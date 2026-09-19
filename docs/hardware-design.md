@@ -1,6 +1,6 @@
 # Hardware design
 
-Canonical hardware, signal, and timing notes for replacing U4 with an RP2040. Firmware phasing lives in [firmware-plan.md](firmware-plan.md).
+Canonical hardware, signal, and timing notes for replacing U4 with an RP2040. Firmware phasing lives in [firmware-plan.md](firmware-plan.md). The Pico + 74AHCT125 carrier is the KiCad protoboard in [kicad/crt-drive/](kicad/crt-drive/); power nets are in [kicad/power_supply.md](kicad/power_supply.md).
 
 Status language used below: **Decided**, **Working hypothesis**, **Open**.
 
@@ -63,8 +63,8 @@ U4 pin numbers identify the ASIC nets. Physical attach is the labeled pads, not 
 
 | Signal | U4 pin | Polarity | Nominal rate | Path |
 | --- | --- | --- | --- | --- |
-| /HSYNC | 53 | Active-low TTL | 31.356 kHz (78 Hz mode) | Solder-side pad **H** → horizontal deflection |
-| /VSYNC | 59 | Active-low TTL | 78.0 Hz (first target) | Solder-side pad **V** → vertical deflection |
+| /HSYNC | 53 | Active-low TTL | 31.373 kHz (78 Hz mode) | Solder-side pad **H** → horizontal deflection |
+| /VSYNC | 59 | Active-low TTL | 78.041 Hz (first target) | Solder-side pad **V** → vertical deflection |
 | V0 / Dim | 64 | Active-high TTL | Pixel rate | Solder-side pad **V0** → neck board |
 | V1 / Normal | 61 | Active-high TTL | Pixel rate | Solder-side pad **V1** → neck board |
 
@@ -113,8 +113,23 @@ GPIO 1 (V1 Pixel)    --->   2A (Pin 5)  -> 2Y (Pin 6)   --->  V1
 GPIO 2 (/HSYNC)      --->   3A (Pin 9)  -> 3Y (Pin 8)   --->  H
 GPIO 3 (/VSYNC)      --->   4A (Pin 12) -> 4Y (Pin 11)  --->  V
 GND                  --->   GND (Pin 7), /OE to GND     --->  GND
-Logic-board +5 V     --->   VCC (Pin 14); Pico VSYS
+Logic-board +5 V     --->   J1 → U1 VCC (Pin 14); D1 → Pico VSYS
 ```
+
+### Injector protoboard (Pico carrier)
+
+**Decided.** Hand-wired through-hole protoboard (KiCad 10), not a fabbed 2-layer PCB. Schematic and jumper layout: [kicad/crt-drive/](kicad/crt-drive/). Power: [kicad/power_supply.md](kicad/power_supply.md).
+
+| Ref | Part | Role |
+| --- | --- | --- |
+| A1 | Raspberry Pi Pico | RP2040; VSYS on pin 39, GND tap pin 38 |
+| U1 | 74AHCT125 | 3.3 V → 5 V TTL, `/OE` tied to GND |
+| J1 | 1×2 | Logic-board **+5 V** / **GND** |
+| J2 | 1×5 | Harness **V0 V1 H V GND** (after series resistors) |
+| R1, R2 | 100 Ω | Damping on V0 / V1 |
+| R3, R4 | 47 Ω | Damping on H / V (47–68 Ω band) |
+| D1 | 1N5817 | +5 V → VSYS; blocks USB back-feed |
+| FB1 | 100 Ω @ 100 MHz | Isolates `+5V_BUFFER` for U1 |
 
 ## Isolation and injection
 
@@ -135,7 +150,7 @@ Prevent contention with U4 by lifting the factory harness at the pads, then driv
 
 ### 78 Hz (first target)
 
-**Working hypothesis.** Copied from the planning notes; confirm on a working WY-120 / MC5 with a scope before treating as measured fact.
+**Working hypothesis** for porch and sync widths. Line and frame *rates* follow 48.000 MHz / 1530 dots / 402 lines and match the maintenance manual (Appendix B: 31.372 kHz, 78.041 Hz). Confirm porches on a working WY-120 / MC5 with a scope before freezing PIO delays.
 
 Character cell assumed: 80 columns × 10 dots, 26 rows × 13 scanlines.
 
@@ -153,7 +168,7 @@ Character cell assumed: 80 columns × 10 dots, 26 rows × 13 scanlines.
 | Front porch | 160 | 3.333 us |
 | Sync pulse (active-low) | 140 | 2.917 us |
 | Back porch | 430 | 8.958 us |
-| **Total line** | **1530** | **31.875 us (fH = 31.356 kHz)** |
+| **Total line** | **1530** | **31.875 us (fH = 31.373 kHz)** |
 
 During active display, /HSYNC stays high; it pulses low for the 140-dot sync interval.
 
@@ -165,13 +180,13 @@ During active display, /HSYNC stays high; it pulses low for the 140-dot sync int
 | Front porch | 12 | 0.383 ms |
 | Sync pulse (active-low) | 4 | 0.128 ms |
 | Back porch | 48 | 1.530 ms |
-| **Total frame** | **402** | **12.820 ms (fV = 78.0 Hz)** |
+| **Total frame** | **402** | **12.813 ms (fV = 78.041 Hz)** |
 
 ### 60 Hz (later, optional)
 
-**Open.** Named as a follow-on mode only. Do not invent porch/sync counts here. Capture timings from a 60 Hz WY-120 raster or from the maintenance manual before implementing.
+**Open** porch and sync counts. Appendix B already gives: same ~31.37 kHz H, **59.999 Hz** V, **416** active lines (26 × 16), 800 dots at 80 columns. Do not invent porches; measure a 60 Hz raster or derive the remaining blanking from a scope capture.
 
-Older notes mentioned HSYNC in a ~31.5–38 kHz band and “60 Hz or 78 Hz”. For v1, lock the 78 Hz table above.
+For v1, lock the 78 Hz table above.
 
 ## Manual cross-references
 
@@ -182,6 +197,7 @@ Wyse WY-120 Maintenance Manual, document **880491-01**:
 | Table 4-2 | 211009 ASIC signal definitions (pins 53, 59, 61, 64) |
 | Figure 4-17 | Video amp: V0/V1 through damping resistors into R404/R402 and IC401 |
 | Section 6 | Schematics; buffering between the ASIC and header P5 |
+| Appendix B | Scan frequency 31.372 kHz; 78.041 Hz / 59.999 Hz; 800×338 @ 78 Hz |
 
 ## Diagnostic patterns (hardware use)
 
