@@ -11,9 +11,9 @@ frame_buffer (SRAM, 800x338 @ 2 bpp)
         |
         | DMA (32-bit words, paced by PIO TX DREQ)
         v
-PIO pixel SM  --> GPIO 0/1 --> 74AHCT125 --> V0/V1
-PIO hsync SM  --> GPIO 2   --> 74AHCT125 --> /HSYNC
-PIO vsync SM  --> GPIO 3   --> 74AHCT125 --> /VSYNC
+PIO pixel SM  --> GPIO 0/1 --> 74AHCT125 --> pads V0 / V1
+PIO hsync SM  --> GPIO 2   --> 74AHCT125 --> pad H
+PIO vsync SM  --> GPIO 3   --> 74AHCT125 --> pad V
 ```
 
 Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PIO instruction per dot). First video mode is 78 Hz; 60 Hz is phase 6.

@@ -10,12 +10,13 @@ The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberr
 
 | Doc | Role |
 | --- | --- |
-| [Hardware design](docs/hardware-design.md) | Board identity, signals, level shift, injection points, 78 Hz timings |
+| [Hardware design](docs/hardware-design.md) | Board identity, labeled pads V0/V1/V/H/GND, level shift, 78 Hz timings |
 | [Firmware plan](docs/firmware-plan.md) | PIO / DMA / framebuffer phases, test patterns, open design choices |
 | [PCB drawing](docs/PCB.svg) | Board artwork referenced from the hardware guide |
+| [Signal pads](docs/signals_pcb.png) | Solder-side taps next to U4: V0, V1, V, H, GND |
 
 **78 Hz** is the first target (48.000 MHz dots, `/HSYNC` 31.356 kHz). **60 Hz** is a later optional mode; timings are TBD.
 
 ## Safety
 
-CRT anode and flyback voltages are lethal. Isolate U4 video and sync outputs before injecting RP2040 signals. Do not work on a powered chassis until you know the discharge path for the CRT anode cap.
+CRT anode and flyback voltages are lethal. Isolate U4 by lifting the harness wires at the labeled V0, V1, V, H, and GND pads before splicing in RP2040 signals. Do not work on a powered chassis until you know the discharge path for the CRT anode cap.
