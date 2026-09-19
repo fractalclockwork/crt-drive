@@ -11,7 +11,7 @@ help:
 	@echo "  make pico-discover — USB Pico on this host (lsusb, by-id, picotool)"
 	@echo "  make hello-test    — build/flash/ping hello_pico (unique digest)"
 	@echo "  make hello-build / hello-flash / hello-serial"
-	@echo "  make build         — CRT firmware (needs main.c / .pio)"
+	@echo "  make build         — CRT firmware (crosshatch, main.c / .pio)"
 	@echo "  make shell / shell-usb / flash / picotool-info"
 	@echo "See docs/toolchains.md (Docker image and how to use it)"
 
