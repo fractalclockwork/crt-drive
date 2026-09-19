@@ -58,7 +58,7 @@ help:
 	@echo "crt-drive pico-dev (Dev-Host, no gateway)"
 	@echo "  make build-images   — build crt-drive/pico-dev:local for this machine"
 	@echo "  make smoke          — compilers, SDK path, picotool with USB support"
-	@echo "  make build          — cmake/ninja firmware from the bind-mounted repo"
+	@echo "  make build          — cmake/ninja CRT firmware (crosshatch)"
 	@echo "  make rebuild        — wipe build/ then build"
 	@echo "  make shell          — interactive shell in pico-dev"
 	@echo "  make shell-usb      — same, with /dev/bus/usb (privileged)"

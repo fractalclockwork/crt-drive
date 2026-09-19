@@ -1,0 +1,8 @@
+; 2-bit luminance on GPIO 0/1 (V0, V1). One instruction per dot at clkdiv 3.
+; Autopull 32, shift left (MSB first). Stalls on empty TX FIFO during blanking.
+
+.program video_pixel
+
+.wrap_target
+    out pins, 2
+.wrap

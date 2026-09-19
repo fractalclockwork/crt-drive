@@ -1,16 +1,16 @@
 # Firmware plan
 
-RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Do not treat the code below as repo sources; `main.c` and the `.pio` files are not in the tree yet.
+RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`main.c`](../main.c), [`video_pixel.pio`](../video_pixel.pio), [`hsync.pio`](../hsync.pio), [`vsync.pio`](../vsync.pio). First image is 78 Hz crosshatch.
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pico carrier (74AHCT125), GPIO map, and the 78 Hz timing table are in the hardware doc. The Dev-Host container and USB Pico path are proven (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)). Start CRT firmware at **phase 1** below (`make build`); do not skip scope checks after phase 2.
+The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pico carrier (74AHCT125), GPIO map, and the 78 Hz timing table are in the hardware doc. The Dev-Host container and USB Pico path are proven (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)). CRT firmware is in-tree (`make build` / `make flash`); `/HSYNC`, `/VSYNC`, and V0/V1 checked out on a scope. Do not drive a CRT until isolation.
 
-**Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78.041 Hz first.
+**Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78.041 Hz first. Three PIO SMs. Pixel blanking is FIFO stall plus one trailing off word per stored line (16 pixels); DMA does not pad the full 1530-dot raster (1530 is not a multiple of 16 pixels).
 
-**Still open:** three SMs vs combined timing SM; blanking (stall vs padded raster); measured confirmation of 78 Hz counts; 60 Hz timings.
+**Still open:** measured confirmation of 78 Hz porch widths; 60 Hz timings.
 
 ## Architecture
 
@@ -28,35 +28,34 @@ Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PI
 
 ## PIO mapping
 
-**Open.** Two layouts appear in the notes. Recommend three SMs because [`CMakeLists.txt`](../CMakeLists.txt) already generates headers from `video_pixel.pio`, `hsync.pio`, and `vsync.pio`.
+**Decided.** Three SMs, matching [`CMakeLists.txt`](../CMakeLists.txt).
 
-| | Recommended (three SMs) | Alternative (two SMs) |
-| --- | --- | --- |
-| Pixel | SM0: `out pins, 2` to V0/V1 | Pixel SM: same 2-bit shift |
-| Timing | SM1: /HSYNC; SM2: /VSYNC, `wait` on IRQ 0 from HSYNC | Combined timing SM for both syncs |
-| CMake | Matches current `pico_generate_pio_header` list | Would collapse to fewer `.pio` files |
+| | Three SMs (implemented) |
+| --- | --- |
+| Pixel | SM0: `out pins, 2` to V0/V1 |
+| Timing | SM1: /HSYNC; SM2: /VSYNC, `wait` on IRQ 0 from HSYNC |
+| CMake | `pico_generate_pio_header` for `video_pixel.pio`, `hsync.pio`, `vsync.pio` |
 
-Pick one before writing the real `.pio` sources. The rest of this plan sketches the three-SM layout.
+### PIO wrap totals
 
-### Draft cycle counts are not spec
-
-The notes include PIO loops that claim 1390 high + 140 low dots (1530) and 398 high + 4 low lines (402). Those loops do **not** add up. Recount before treating them as the implementation:
+[`hsync.pio`](../hsync.pio) wrap is **1530** dots (960 high active+FP, 140 low sync, 430 high BP). [`vsync.pio`](../vsync.pio) wrap is **402** IRQ-paced lines (398 high + 4 low). The sketches below are historical; they do **not** add up and are not what is in the `.pio` files:
 
 - **HSYNC draft:** `set pins,1 [9]` (10) + `set x,30` (1) + 31×32 (992) + `set x,11` (1) + 12×32 (384) = **1388** high, not 1390. Low side: `set pins,0 [7]` (8) + `set x,3` (1) + 4×32 (128) + `irq 0` (1) = **138** low, not 140. Line total **1526**, not 1530.
 - **VSYNC draft:** `set x,31` then `wait`/`jmp` is 32 lines; plus `set x,11` is 12 more → **44** high lines, not 398. The 4-line low loop is the only part that matches.
 
-Fix with delay slots and nested X/Y loops so one wrap equals 1530 dots and 402 IRQ-paced lines. Verify on a scope against [hardware-design.md](hardware-design.md).
+Porch *split* (800/160/140/430 and 338/12/4/48) is still a **working hypothesis** until a WY-120 capture. Line and frame *rates* from 48 MHz / 1530 / 402 match Appendix B and checked out on a Pico GPIO scope.
 
 ## Framebuffer packing
 
-**Working hypothesis.** Active area only: 800 × 338 pixels, 2 bits/pixel, MSB-first, 4 pixels/byte.
+**Decided.** Active area: 800 × 338 pixels, 2 bits/pixel, MSB-first, 4 pixels/byte. Each stored line is **204** bytes (200 packed + 4 trailing off bytes / 16 off pixels) so a FIFO stall holds V0/V1 low.
 
 | Parameter | Value |
 | --- | --- |
 | Active resolution | 800 × 338 (270,400 pixels) |
 | Depth | 2 bpp (V0, V1) |
 | Packed width | 200 bytes/line |
-| Buffer size | 67,600 bytes (~66 KB of 264 KB SRAM) |
+| Line stride | 204 bytes (51 DMA words) |
+| Buffer size | 338 × 204 = 68,952 bytes |
 | Shift | `out_shift_right = false`, autopull 32 bits |
 
 | Bits | V0 | V1 | State |
@@ -66,30 +65,26 @@ Fix with delay slots and nested X/Y loops so one wrap equals 1530 dots and 402 I
 | `10` | 0 | 1 | Normal |
 | `11` | 1 | 1 | Bold |
 
-**Open:** a wrap-forever `out pins, 2` SM consumes a word every 16 dots at all times. The 67,600-byte buffer only covers active video (800 × 338). Either:
-
-- stall/IRQ the pixel SM during porches and vertical blank, or
-- pad the DMA stream with blank pixels for the full 1530 × 402 raster.
-
-Decide this in phase 3 so DMA length and PIO wait logic match.
+**Decided:** wrap-forever `out pins, 2` stalls on empty TX FIFO during H/V blank. DMA sends 51 words per line (800 active pixels + 16 off). 64 V-blank lines are extra DMA rows of zeros, not a second framebuffer. HSYNC `push`es a dummy RX word at the start of active to pace the next line.
 
 ## Phases
 
 ### 1. Clock and PIO load
 
-- [ ] `set_sys_clock_khz(144000, true)`
-- [ ] `pico_generate_pio_header()` for each `.pio` (already in CMake)
-- [ ] Load programs, set clkdiv 3.0, `pio_enable_sm_mask_in_sync`
-- [ ] Build succeeds (headers generated, no missing `main.c` / `.pio` once those files exist)
+- [x] `set_sys_clock_khz(144000, true)`
+- [x] `pico_generate_pio_header()` for each `.pio` (already in CMake)
+- [x] Load programs, set clkdiv 3.0, `pio_enable_sm_mask_in_sync`
+- [x] Build succeeds (`make build`)
 
 ### 2. Stable sync
 
-- [ ] /HSYNC: 31.373 kHz, active-low, 140-dot pulse (2.917 us)
-- [ ] /VSYNC: 78.041 Hz, active-low, 4-line pulse (0.128 ms)
-- [ ] Line period 31.875 us, frame period 12.813 ms
-- [ ] Enable SMs in lockstep so VSYNC IRQ alignment is repeatable
+- [x] /HSYNC: 31.373 kHz, active-low, 140-dot pulse (2.917 us) — scope
+- [x] /VSYNC: 78.041 Hz, active-low, 4-line pulse (0.128 ms) — scope
+- [x] Line period 31.875 us, frame period 12.813 ms — scope
+- [x] Enable SMs in lockstep so VSYNC IRQ alignment is repeatable
+- [x] PIO wrap totals 1530 dots / 402 lines (see [`hsync.pio`](../hsync.pio), [`vsync.pio`](../vsync.pio))
 
-Sketch (`hsync.pio` / `vsync.pio`) — delays are placeholders; fix counts as noted above:
+Historical sketch (wrong counts; not the repo sources):
 
 ```pio
 .program hsync
@@ -139,11 +134,11 @@ low_lines:
 
 ### 3. Pixel SM and packing
 
-- [ ] Adjacent GPIOs for V0/V1 (`sm_config_set_out_pins(..., pin_v0, 2)`)
-- [ ] MSB-first autopull 32
-- [ ] `set_pixel` / `clear_buffer` helpers
-- [ ] Blanking strategy chosen (stall vs padded raster)
-- [ ] Scope: 2-bit stream on GPIO 0/1 at 48 MHz during active line; idle/blank before /HSYNC
+- [x] Adjacent GPIOs for V0/V1 (`sm_config_set_out_pins(..., pin_v0, 2)`)
+- [x] MSB-first autopull 32
+- [x] `set_pixel` / `clear_buffer` helpers
+- [x] Blanking strategy chosen (FIFO stall + trailing off word; 64 DMA blank lines)
+- [x] Scope: 2-bit stream on GPIO 0/1 during active line; idle/blank before /HSYNC
 
 ```pio
 .program video_pixel
@@ -216,12 +211,12 @@ void init_crt_pio(PIO pio, uint pin_v0, uint pin_hsync, uint pin_vsync) {
 
 ### 4. DMA loop
 
-- [ ] Data channel: 32-bit incrementing read from `frame_buffer`, write to `pio->txf[sm]`, DREQ = PIO TX
-- [ ] Control channel: reload data-channel read address via `al3_read_addr_trig`
-- [ ] Start after clock + PIO init
-- [ ] TX FIFO stays non-empty (`fstat`); no underflow gaps on V0/V1
-- [ ] Stream repeats every 12.813 ms
-- [ ] Active line ends cleanly before the /HSYNC pulse (depends on blanking choice in phase 3)
+- [x] Data channel: 32-bit incrementing read from `frame_buffer`, write to `pio->txf[sm]`, DREQ = PIO TX
+- [x] Per-line kick: hsync RX `push` drains into a dummy, then a control channel writes `al3_read_addr_trig` from a 402-entry line-pointer table (338 active + 64 blank)
+- [x] Start after clock + PIO init
+- [x] TX FIFO stays non-empty during active; no underflow gaps on V0/V1 — scope
+- [x] Stream repeats every 12.813 ms — scope
+- [x] Active line ends cleanly before the /HSYNC pulse — scope
 
 ```c
 #define TOTAL_FRAME_BYTES (FRAME_HEIGHT * BYTES_PER_LINE) /* 67600 */
@@ -269,11 +264,16 @@ void setup_framebuffer_dma(PIO pio, uint sm) {
 }
 ```
 
-Length `TOTAL_FRAME_WORDS` only matches an active-area buffer. If phase 3 pads blanking, this count must grow.
+Implemented DMA is per-line (51 words), not this whole-frame `TOTAL_FRAME_WORDS` loop. The sketch remains as the original control-channel idea.
 
 ### 5. Test patterns
 
 Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. Optional USB-CDC or later key emulation (`Ctrl+Shift+F1` … `F4`) can switch patterns; that UI is not required for first light.
+
+- [x] Crosshatch generator in [`main.c`](../main.c) (grid, bold box, bold reticle)
+- [ ] Intensity bars / focus matrix / full-on
+- [x] Scope: V0/V1 pattern vs /HSYNC (vertical bars every 1.667 us)
+- [ ] CRT after isolation and 5 V level shift
 
 | Pattern | Drawing | Analog use |
 | --- | --- | --- |
@@ -282,7 +282,7 @@ Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is
 | Focus matrix | Dense `H` or `E` in 10 × 13 cells (132 later if needed) | Center/corner focus |
 | Full-on box | All pixels bold | Max beam current, 78 Hz overscan |
 
-Sketch for the first two (helpers from phase 3). Crosshatch draw order: grid, then bold box and reticle.
+Sketch for the first two (helpers from phase 3). Crosshatch draw order: grid, then bold box and reticle. Crosshatch is in `main.c`; intensity bars are still a sketch.
 
 ```c
 void generate_crosshatch_pattern(void) {
@@ -362,8 +362,8 @@ On the CRT (after isolation and 5 V level shift):
 
 ## Open questions
 
-1. Three PIO SMs vs combined timing SM (recommend three; CMake already assumes it).
-2. Pixel SM blanking: stall during retrace vs padded full-raster DMA.
-3. Confirm 78 Hz numbers on hardware before freezing PIO delays.
+1. ~~Three PIO SMs vs combined timing SM~~ — three SMs.
+2. ~~Pixel SM blanking: stall vs padded full-raster DMA~~ — FIFO stall + trailing off word.
+3. Confirm 78 Hz porch *widths* on a WY-120 before freezing delays (wrap *totals* 1530/402 and line/frame rates checked out on a Pico GPIO scope).
 4. 60 Hz porches TBD (Appendix B has active size and rates only).
 5. Factory-key pattern switching is optional UI, not v1.

@@ -1,0 +1,39 @@
+; /HSYNC on SET pin (GPIO 2). Idle high, 140-dot active-low pulse.
+; One wrap = 1530 dots @ clkdiv 3 (31.875 us, 31.373 kHz).
+;
+; Line: 800 active + 160 front porch + 140 sync + 430 back porch.
+; Wrap starts at active. RX push kicks per-line pixel DMA.
+; IRQ 0 ticks the vsync SM at the end of the sync pulse.
+
+.program hsync
+
+.wrap_target
+    ; --- active + front porch: 960 dots, pin already high ---
+    mov isr, null                   ; 1  dummy word for DMA DREQ
+    push noblock                    ; 1
+    set x, 28                       ; 1
+afp_outer:                          ; 29 * 33 = 957
+    set y, 30                       ;   1
+afp_inner:
+    jmp y-- afp_inner               ;   31
+    jmp x-- afp_outer               ;   1
+    ; 1+1+1+957 = 960
+
+    ; --- sync pulse: 140 dots, pin low ---
+    set pins, 0 [9]                 ; 10
+    set x, 3                        ; 1
+sync_loop:
+    jmp x-- sync_loop [31]          ; 128
+    irq 0                           ; 1
+    ; 10+1+128+1 = 140
+
+    ; --- back porch: 430 dots, pin high ---
+    set pins, 1                     ; 1
+    set x, 3                        ; 1
+bp_outer:                           ; 4 * 107 = 428
+    set y, 31                       ;   1
+bp_inner:
+    jmp y-- bp_inner [2]            ;   96
+    jmp x-- bp_outer [9]            ;   10
+    ; 1+1+428 = 430
+.wrap

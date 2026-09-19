@@ -4,7 +4,7 @@ Programmable CRT drive: sync and video from a microcontroller for analog CRTs an
 
 The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberry Pi Pico (RP2040) replaces the CRT drive ASIC (Wyse 211009-02, U4): it synthesizes active-low `/HSYNC` and `/VSYNC` plus active-high dual video (V0 dim, V1 normal) and drives the existing deflection and neck boards. The original CPU, EPROM, and VRAM bus do not need to run.
 
-**Status:** Injection pads and the Pico + 74AHCT125 carrier (KiCad protoboard) are decided. The Dev-Host Docker toolchain is validated (`make smoke` / `make hello-test`). CRT firmware is phased and not started (`main.c` / `.pio` not in the tree).
+**Status:** Injection pads and the Pico + 74AHCT125 carrier (KiCad protoboard) are decided. The Dev-Host Docker toolchain is validated (`make smoke` / `make hello-test`). CRT firmware is started: 78 Hz crosshatch on GPIO 0–3 (`make build` / `make flash`). `/HSYNC`, `/VSYNC`, and V0/V1 checked out on a scope. Other patterns are later; do not drive a CRT until isolation.
 
 ## Docs
 
@@ -39,16 +39,16 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](.devcon
 
 Hardware is ready to drive: lift harness at pads **V0**, **V1**, **V**, **H**, **GND**; level-shift on the Pico carrier (74AHCT125); power from logic-board +5 V / GND. First video mode is **78 Hz** (48.000 MHz dots, `/HSYNC` 31.373 kHz, 78.041 Hz). **60 Hz** is optional later.
 
-Firmware order (detail and sketches in [firmware-plan.md](docs/firmware-plan.md)):
+Firmware order (detail in [firmware-plan.md](docs/firmware-plan.md)):
 
-1. Clock + PIO load (build `main.c` / three `.pio` files against current CMake)
-2. Stable `/HSYNC` and `/VSYNC` (fix draft cycle counts on a scope)
-3. Pixel SM + framebuffer packing (choose blanking strategy)
-4. DMA loop into PIO TX
-5. Test patterns on the CRT
+1. Clock + PIO load — done (`main.c`, three `.pio` files)
+2. Stable `/HSYNC` and `/VSYNC` — PIO wraps are 1530 dots / 402 lines; rates confirmed on a scope
+3. Pixel SM + packing — done (active 800×338 @ 2 bpp, FIFO stall, trailing off word)
+4. DMA loop into PIO TX — done (per-line kick from hsync RX)
+5. Test patterns — crosshatch on the wire; intensity / focus / full-on later; CRT after isolation
 6. Optional 60 Hz
 
-Open before phase 3 code freezes: three PIO SMs vs combined timing SM; stall vs padded-raster blanking; confirm 78 Hz porches on hardware.
+Three PIO SMs and stall blanking are decided. Porch *widths* stay a working hypothesis until a WY-120 capture.
 
 ## Safety
 

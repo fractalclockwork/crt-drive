@@ -1,6 +1,6 @@
 # Test patterns
 
-Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Do not treat the C below as repo sources; pattern generators are not in the tree yet.
+Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Crosshatch is in [`main.c`](../main.c); the C below matches that generator. Intensity, focus, and full-on are not in the tree yet.
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
@@ -10,7 +10,7 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Role
 
-Firmware **phase 5**. Fill `frame_buffer`, then start the DMA loop (phase 4). Analog setup uses these as visual targets; this doc is the drawing spec, not the PIO how-to.
+Firmware **phase 5**. Crosshatch fills `frame_buffer` before the DMA loop starts. Analog setup uses these as visual targets; this doc is the drawing spec, not the PIO how-to.
 
 First target is the Link MC5 / WY-120 78 Hz mode. Other CRT or TV profiles reuse the same pattern *ideas* with a different active size and output stage.
 
