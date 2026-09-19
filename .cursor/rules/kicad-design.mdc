@@ -1,0 +1,9 @@
+---
+description: KiCad schematic/PCB work uses the kicad-design skill (ERC/DRC, protoboard jumpers)
+globs: docs/kicad/**/*
+alwaysApply: false
+---
+
+# KiCad design
+
+Procedure: [`.cursor/skills/kicad-design/SKILL.md`](../skills/kicad-design/SKILL.md). Electrical notes: [`docs/hardware-design.md`](../../docs/hardware-design.md).

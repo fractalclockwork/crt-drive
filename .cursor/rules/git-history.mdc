@@ -1,0 +1,10 @@
+---
+description: Git branch names and authorship so history stays about the project
+alwaysApply: true
+---
+
+# Git history
+
+- Branch as `feature/<short-name>` (example: `feature/pio-hsync`). Never `cursor/<name>` or other tool/vendor prefixes.
+- Commits use the repo owner's GitHub identity. Do not add Cursor (or any agent) as collaborator, committer, co-author, or `Co-authored-by` trailer.
+- Do not invite Cursor to the GitHub repo.

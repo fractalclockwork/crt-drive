@@ -1,0 +1,10 @@
+# Pin versions for reproducible images (see Dockerfiles / image labels).
+# Template: fractalclockwork/cede lab/docker/TOOLCHAIN_VERSIONS (pico-dev only).
+
+BASE_IMAGE_DEBIAN=debian:bookworm-slim
+
+# Raspberry Pi Pico SDK (git tag)
+PICO_SDK_VERSION=2.1.1
+
+# picotool tag — keep in lockstep with the SDK (USB load + ELF-to-UF2)
+PICOTOOL_VERSION=2.1.1

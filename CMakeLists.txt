@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Include the standard Raspberry Pi Pico SDK setup
+# Default RP2040 Pico; override with -DPICO_BOARD=pico_w (docker/Makefile PICO_BOARD).
+set(PICO_BOARD pico CACHE STRING "RP2040 board type")
+
+# Include the standard Raspberry Pi Pico SDK setup (PICO_SDK_PATH from pico-dev).
 include(pico_sdk_import.cmake)
 
 project(crt_drive C CXX ASM)

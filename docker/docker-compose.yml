@@ -1,0 +1,27 @@
+name: crt-drive
+
+# Dev-Host only: bind-mount this repo and build RP2040 firmware in pico-dev.
+# USB flash/serial is a separate merge file (docker-compose.usb.yml) so ordinary
+# builds do not need privileged device access.
+
+services:
+  pico-dev:
+    build:
+      context: ./pico-dev
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${BASE_IMAGE_DEBIAN:-debian:bookworm-slim}
+        PICO_SDK_VERSION: ${PICO_SDK_VERSION:-2.1.1}
+        PICOTOOL_VERSION: ${PICOTOOL_VERSION:-2.1.1}
+    image: crt-drive/pico-dev:local
+    volumes:
+      - ..:/workspace
+    working_dir: /workspace
+    environment:
+      PICO_SDK_PATH: /opt/pico-sdk
+    user: "${DEV_UID:-0}:${DEV_GID:-0}"
+    # Keep the service alive for `compose up` / Cursor Dev Containers.
+    # `compose run` (make smoke/build/shell) replaces this command.
+    command: ["sleep", "infinity"]
+    stdin_open: true
+    tty: true
