@@ -185,9 +185,9 @@ Wyse WY-120 Maintenance Manual, document **880491-01**:
 
 ## Diagnostic patterns (hardware use)
 
-These are visual targets for analog setup, not firmware how-to (see [firmware-plan.md](firmware-plan.md)):
+These are visual targets for analog setup. Drawing coordinates live in [test-pattern-design.md](test-pattern-design.md); PIO / DMA how-to is in [firmware-plan.md](firmware-plan.md).
 
-- **Crosshatch:** overscan border, vertical lines every 80 pixels, horizontal bars every 13 lines (size, centering, linearity, pincushion).
+- **Crosshatch:** bold overscan box, vertical every 80 pixels, horizontal every 13 lines, bold center reticle (size, centering, linearity, pincushion).
 - **Intensity bars:** four bands `00` / `01` / `10` / `11` (brightness and contrast).
-- **Focus matrix:** dense character grid (flyback / neck focus).
-- **Full-on box:** every pixel on (beam current and overscan limits).
+- **Focus matrix:** dense `H` or `E` in 10 × 13 cells (flyback / neck focus).
+- **Full-on box:** every pixel bold (beam current and overscan limits).

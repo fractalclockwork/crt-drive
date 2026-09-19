@@ -6,7 +6,7 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-Planning for the Link MC5 / WY-120 first target is wrapped. Injection pads, level shift, GPIO map, and the 78 Hz timing table are in the hardware doc. Start firmware on a Pico SDK host at **phase 1** below; do not skip scope checks after phase 2.
+Planning for the Link MC5 / WY-120 first target is wrapped. Injection pads, level shift, GPIO map, and the 78 Hz timing table are in the hardware doc. Prove the Dev-Host container and USB Pico first (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)), then start CRT firmware at **phase 1** below (`make build`); do not skip scope checks after phase 2.
 
 **Decided for v1:** pads V0/V1/H/V/GND, 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78 Hz first.
 
@@ -273,20 +273,29 @@ Length `TOTAL_FRAME_WORDS` only matches an active-area buffer. If phase 3 pads b
 
 ### 5. Test patterns
 
-v1 is pattern generators on the Pico, not factory keyboard chords. Optional USB-CDC or later key emulation (`Ctrl+Shift+F1` … `F4`) can switch patterns; that UI is not required for first light.
+Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. Optional USB-CDC or later key emulation (`Ctrl+Shift+F1` … `F4`) can switch patterns; that UI is not required for first light.
 
 | Pattern | Drawing | Analog use |
 | --- | --- | --- |
-| Crosshatch | Bold overscan border; vertical every 80 px; horizontal every 13 lines | Size, centering, linearity, pincushion |
+| Crosshatch | Bold overscan box; vertical every 80 px; horizontal every 13 lines; bold center reticle | Size, centering, linearity, pincushion |
 | Intensity bars | Four horizontal bands: off, dim, normal, bold | Brightness / contrast, no bloom |
-| Focus matrix | Dense `H` or `E` grid, 80-column cell (132 later if needed) | Center/corner focus |
+| Focus matrix | Dense `H` or `E` in 10 × 13 cells (132 later if needed) | Center/corner focus |
 | Full-on box | All pixels bold | Max beam current, 78 Hz overscan |
 
-Sketch for the first two:
+Sketch for the first two (helpers from phase 3). Crosshatch draw order: grid, then bold box and reticle.
 
 ```c
 void generate_crosshatch_pattern(void) {
     clear_buffer(PIXEL_OFF);
+
+    for (uint16_t x = 80; x < FRAME_WIDTH - 1; x += 80) {
+        for (uint16_t y = 0; y < FRAME_HEIGHT; y++)
+            set_pixel(x, y, PIXEL_NORMAL);
+    }
+    for (uint16_t y = 13; y < FRAME_HEIGHT - 1; y += 13) {
+        for (uint16_t x = 0; x < FRAME_WIDTH; x++)
+            set_pixel(x, y, PIXEL_NORMAL);
+    }
 
     for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
         set_pixel(x, 0, PIXEL_BOLD);
@@ -297,16 +306,17 @@ void generate_crosshatch_pattern(void) {
         set_pixel(FRAME_WIDTH - 1, y, PIXEL_BOLD);
     }
 
-    for (uint16_t x = 80; x < FRAME_WIDTH - 1; x += 80) {
-        for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
+    const uint16_t cx = FRAME_WIDTH / 2;   /* 400 */
+    const uint16_t cy = FRAME_HEIGHT / 2;  /* 169 */
+    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
+        set_pixel(cx - 1, y, PIXEL_BOLD);
+        set_pixel(cx,     y, PIXEL_BOLD);
+        set_pixel(cx + 1, y, PIXEL_BOLD);
     }
-
-    for (uint16_t y = 13; y < FRAME_HEIGHT - 1; y += 13) {
-        for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
+    for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
+        set_pixel(x, cy - 1, PIXEL_BOLD);
+        set_pixel(x, cy,     PIXEL_BOLD);
+        set_pixel(x, cy + 1, PIXEL_BOLD);
     }
 }
 

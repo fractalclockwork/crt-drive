@@ -1,0 +1,18 @@
+# Merge: docker compose -f docker-compose.yml -f docker-compose.usb.yml …
+# Pico is plugged into the Dev-Host (no Pi gateway). Privileged /dev is required
+# for picotool (BOOTSEL or USB-CDC reset) and for ACM serial after re-enumeration.
+
+name: crt-drive
+
+services:
+  pico-dev:
+    user: "0:0"
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - /dev:/dev
+    group_add:
+      - dialout
+    environment:
+      PICO_SDK_PATH: /opt/pico-sdk

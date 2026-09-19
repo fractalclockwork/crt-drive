@@ -1,0 +1,50 @@
+# --- Firmware build outputs ---
+**/build/
+*.uf2
+*.hex
+*.elf
+*.map
+*.bin
+*.o
+*.a
+*.dis
+__pycache__/
+*.py[cod]
+
+# --- Local / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Editors & OS clutter ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.#*
+*.bak
+.DS_Store
+Thumbs.db
+
+# --- KiCad ---
+# Track schematic, PCB, project, and helper scripts under docs/kicad/.
+# Ignore editor state, backups, lock files, and local history.
+**/.history/
+fp-info-cache
+*.kicad_prl
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*-backups/
+\#auto_saved_files#
+_autosave-*
+*.lck
+
+# --- Ephemeral ---
+.tmp/
+.tmp.*
+*.tmp
+
+# Optional: local Docker Compose overrides (machine-specific binds)
+/docker-compose.override.yml
+**/docker-compose.override.yml

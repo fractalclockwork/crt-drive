@@ -1,0 +1,5 @@
+# Merge: docker compose -f docker-compose.yml -f docker-compose.platform-arm64.yml build
+name: crt-drive
+services:
+  pico-dev:
+    platform: linux/arm64
