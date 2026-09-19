@@ -41,36 +41,38 @@ Status language used below: **Decided**, **Working hypothesis**, **Open**.
 
 ### RP2040 replacement
 
-PIO state-machine assignment is **Open** (see [firmware plan](firmware-plan.md)). The diagram uses the CMake-aligned three-SM recommendation.
+**Decided** injection path: solder-side pads labeled V0, V1, V, H, and GND next to U4 ([signals_pcb.png](signals_pcb.png)). PIO state-machine assignment is **Open** (see [firmware plan](firmware-plan.md)). The diagram uses the CMake-aligned three-SM recommendation.
 
 ```text
 [ RP2040 SRAM Framebuffer ] (800x338 @ 2-bit, 67.6 KB)
       ||
       v (Paced DMA)
-[ PIO SM0 (Pixel) ] ======> [ 74AHCT125 ] ==> Coax Red/White ==> IC401 Video Amp
-[ PIO SM1 (/HSYNC)] ======> [ 74AHCT125 ] ==> TP1            ==> H-Deflection
-[ PIO SM2 (/VSYNC)] ======> [ 74AHCT125 ] ==> Topside jumper ==> V-Deflection
+[ PIO SM0 (Pixel) ] ======> [ 74AHCT125 ] ==> pads V0 / V1 --> neck board
+[ PIO SM1 (/HSYNC)] ======> [ 74AHCT125 ] ==> pad H         --> H-deflection
+[ PIO SM2 (/VSYNC)] ======> [ 74AHCT125 ] ==> pad V         --> V-deflection
   (144 MHz sys_clk / 3 = 48 MHz dot clock)
 ```
 
-The original CPU and RAM bus do not need to be functional. Onboard XO-10 can sit idle; the RP2040 generates its own 48.000 MHz dot clock.
+The original CPU and RAM bus do not need to be functional. Onboard XO-10 is unused; the RP2040 generates its own 48.000 MHz dot clock.
 
 ## Signals
 
 ### Pinout and polarity
 
+U4 pin numbers identify the ASIC nets. Physical attach is the labeled pads, not flywires to the QFP.
+
 | Signal | U4 pin | Polarity | Nominal rate | Path |
 | --- | --- | --- | --- | --- |
-| /HSYNC | 53 | Active-low TTL | 31.356 kHz (78 Hz mode) | TP1 → horizontal deflection |
-| /VSYNC | 59 | Active-low TTL | 78.0 Hz (first target) | Pin 59 or topside jumper → vertical deflection |
-| V0 / Dim | 64 | Active-high TTL | Pixel rate | 100 ohm R404, white coax (R21) → IC401 |
-| V1 / Normal | 61 | Active-high TTL | Pixel rate | 100 ohm R402, red coax (R18) → IC401 |
+| /HSYNC | 53 | Active-low TTL | 31.356 kHz (78 Hz mode) | Solder-side pad **H** → horizontal deflection |
+| /VSYNC | 59 | Active-low TTL | 78.0 Hz (first target) | Solder-side pad **V** → vertical deflection |
+| V0 / Dim | 64 | Active-high TTL | Pixel rate | Solder-side pad **V0** → neck board |
+| V1 / Normal | 61 | Active-high TTL | Pixel rate | Solder-side pad **V1** → neck board |
 
-R404 and R402 are pull-downs at the IC401 inputs. Driving them from 5 V level-shifted RP2040 outputs gives four brightness levels.
+R18 and R21 sit next to the V0/V1 pads (on-board damping). Driving the V0/V1 pads from 5 V level-shifted RP2040 outputs gives four brightness levels.
 
 ### 2-bit luminance
 
-| V0 (White / R21 / Dim) | V1 (Red / R18 / Normal) | Beam current | Pixel state |
+| V0 (Dim) | V1 (Normal) | Beam current | Pixel state |
 | --- | --- | --- | --- |
 | 0 (0 V) | 0 (0 V) | Off | Blank / black |
 | 1 (+5 V) | 0 (0 V) | Low | Dim text |
@@ -96,31 +98,38 @@ Tie all /OE pins to GND so outputs stay enabled.
 
 | Pico GPIO (3.3 V) | 74AHCT125 | CRT side |
 | --- | --- | --- |
-| GPIO 0 (V0) | 1A pin 2 → 1Y pin 3 | White coax (R21) → R404 → IC401 |
-| GPIO 1 (V1) | 2A pin 5 → 2Y pin 6 | Red coax (R18) → R402 → IC401 |
-| GPIO 2 (/HSYNC) | 3A pin 9 → 3Y pin 8 | TP1 (horizontal deflection) |
-| GPIO 3 (/VSYNC) | 4A pin 12 → 4Y pin 11 | Topside /VSYNC jumper |
-| GND | Pin 7 and all /OE | Common ground |
+| GPIO 0 (V0) | 1A pin 2 → 1Y pin 3 | Pad **V0** (neck video, dim) |
+| GPIO 1 (V1) | 2A pin 5 → 2Y pin 6 | Pad **V1** (neck video, normal) |
+| GPIO 2 (/HSYNC) | 3A pin 9 → 3Y pin 8 | Pad **H** |
+| GPIO 3 (/VSYNC) | 4A pin 12 → 4Y pin 11 | Pad **V** |
+| GND | Pin 7 and all /OE | Pad **GND** (common with Pico) |
+| Pico VSYS / AHCT VCC | — | Logic-board **+5 V** (on-board; no pad ID claimed) |
 
 ```text
-Pico GPIO (3.3V)           74AHCT125 (VCC = 5V)              CRT Input Stage
-----------------            -------------------              ---------------
-GPIO 0 (V0 Pixel)    --->   1A (Pin 2)  -> 1Y (Pin 3)   --->  White Coax (R21) -> R404 -> IC401
-GPIO 1 (V1 Pixel)    --->   2A (Pin 5)  -> 2Y (Pin 6)   --->  Red Coax (R18)   -> R402 -> IC401
-GPIO 2 (/HSYNC)      --->   3A (Pin 9)  -> 3Y (Pin 8)   --->  TP1 (Horizontal Deflection)
-GPIO 3 (/VSYNC)      --->   4A (Pin 12) -> 4Y (Pin 11)  --->  Topside VSYNC / Jumper
-GND                  --->   GND (Pin 7), Output Enables (/OE) to GND
+Pico GPIO (3.3V)           74AHCT125 (VCC = 5V)              CRT pads (solder side, near U4)
+----------------            -------------------              --------------------------------
+GPIO 0 (V0 Pixel)    --->   1A (Pin 2)  -> 1Y (Pin 3)   --->  V0
+GPIO 1 (V1 Pixel)    --->   2A (Pin 5)  -> 2Y (Pin 6)   --->  V1
+GPIO 2 (/HSYNC)      --->   3A (Pin 9)  -> 3Y (Pin 8)   --->  H
+GPIO 3 (/VSYNC)      --->   4A (Pin 12) -> 4Y (Pin 11)  --->  V
+GND                  --->   GND (Pin 7), /OE to GND     --->  GND
+Logic-board +5 V     --->   VCC (Pin 14); Pico VSYS
 ```
 
 ## Isolation and injection
 
-Prevent contention with U4 before driving the analog boards.
+**Decided.** The guessed TP1 / U4 pin-59 flywire / coax / lift-R402/R404 path was wrong. Factory jumpers as previously described were not present. Access is the solder side of the logic PCB (a few screws).
 
-1. **Video isolation:** Lift one leg of R402 / R404 on the ASIC side, or disconnect the 3-wire coax at the mainboard and tap the harness.
-2. **/HSYNC tap:** TP1 on the mainboard.
-3. **/VSYNC tap:** U4 pin 59 (30 AWG) or the matching topside J-series jumper (confirm with continuity).
-4. **Coax:** V0 dim → white (R21); V1 normal → red (R18).
-5. **Clock:** Leave XO-10 idle.
+![Signal pads V0, V1, V, H, GND next to U4](signals_pcb.png)
+
+Solder side under U4: silkscreen **V0**, **V1**, **V**, **H**, **GND**. The photo shows V1, V0, and GND desoldered; those wires ran to the CRT neck board. H and V wires were lifted later and spliced.
+
+Prevent contention with U4 by lifting the factory harness at the pads, then driving the load-side wires:
+
+1. Remove the logic PCB (few screws).
+2. Locate labeled pads V0, V1, V, H, and GND near U4.
+3. Lift the factory wires at V0, V1, and GND (neck-board video and ground). Lift H and V the same way. Splice the 74AHCT125 outputs into those load-side wires so U4 is isolated.
+4. Power the Pico and 74AHCT125 from logic-board +5 V and GND.
 
 ## Video timings
 
