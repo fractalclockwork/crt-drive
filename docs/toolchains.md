@@ -143,3 +143,4 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.dev
 
 - [Firmware plan](firmware-plan.md) — PIO / DMA once the toolchain and USB path are trusted
 - [Hardware design](hardware-design.md) — GPIO map and 78 Hz timings
+- [KiCad carrier](kicad/crt-drive/) — Pico + 74AHCT125 protoboard
