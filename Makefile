@@ -2,7 +2,8 @@
 # Docker targets live in docker/Makefile; this file is a thin wrapper.
 
 .PHONY: help image smoke build rebuild shell shell-usb flash serial serial-check picotool-info \
-	pico-discover hello-build hello-flash hello-serial hello-test
+	pico-discover hello-build hello-flash hello-serial hello-test \
+	term-build term-flash term-serial term-test
 
 help:
 	@echo "crt-drive RP2040 toolchain (Docker on this Dev-Host)"
@@ -11,7 +12,8 @@ help:
 	@echo "  make pico-discover — USB Pico on this host (lsusb, by-id, picotool)"
 	@echo "  make hello-test    — build/flash/ping hello_pico (unique digest)"
 	@echo "  make hello-build / hello-flash / hello-serial"
-	@echo "  make build         — CRT firmware (patterns, main.c / .pio)"
+	@echo "  make build         — CRT pattern firmware (crt_drive)"
+	@echo "  make term-build / term-flash / term-serial / term-test"
 	@echo "  make shell / shell-usb / flash / serial / serial-check / picotool-info"
 	@echo "See docs/toolchains.md (Docker image and how to use it)"
 
@@ -59,3 +61,21 @@ hello-serial:
 
 hello-test:
 	$(MAKE) -C docker hello-test
+
+term-build:
+	$(MAKE) -C docker term-build
+
+term-flash:
+	$(MAKE) -C docker term-flash
+
+term-serial:
+	$(MAKE) -C docker term-serial
+
+TERM_TEST_ID ?= $(shell date +%s)-$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
+term-test:
+	$(MAKE) pico-discover
+	@if ! lsusb -d 2e8a:000a >/dev/null 2>&1 && ! lsusb -d 2e8a:0003 >/dev/null 2>&1; then \
+		echo "HIL skip: no Pico on USB (2e8a:000a / 2e8a:0003)"; \
+	else \
+		$(MAKE) -C docker term-test TERM_TEST_ID="$(TERM_TEST_ID)"; \
+	fi

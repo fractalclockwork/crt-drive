@@ -17,8 +17,8 @@ From the repository root: `make help`. Never `apt install gcc-arm-none-eabi`, ne
 
 1. `make pico-discover` — `2e8a:000a` CDC (app running), `2e8a:0003` BOOTSEL (load), none = skip HIL and say so.
 2. Edit sources in this git tree (bind-mounted at `/workspace` in the container).
-3. Compile: `make hello-build` (bring-up) or `make build` (CRT, when `main.c` / `.pio` exist).
-4. Gate: `make hello-test` (unique `digest=` banner + `pong`). Or `make hello-flash` then `make hello-serial`.
+3. Compile: `make hello-build` (bring-up), `make build` (patterns), or `make term-build` (glass TTY).
+4. Gate: `make hello-test` (unique `digest=` banner + `pong`). CRT glass TTY: `make term-test` (`digest=` + UTF-8 line, or explicit skip if no Pico).
 5. Evidence is CDC `digest=`, not ninja exit 0 alone.
 
 ## USB and Docker

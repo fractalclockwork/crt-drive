@@ -1,6 +1,6 @@
 # Firmware plan
 
-RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`pattern/main.c`](../pattern/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns.
+RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`pattern/main.c`](../pattern/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns. Terminal emulator: [terminal-plan.md](terminal-plan.md).
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 

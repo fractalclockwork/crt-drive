@@ -63,11 +63,12 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make flash` | Load `build/crt_drive.uf2` with the same flash helper as hello |
 | `make serial` | USB CDC: type `1`–`5` (or `c`/`i`/`f`/`n`/`o`) to switch test patterns (BOOTSEL also cycles) |
 | `make serial-check` | Wait for `crt-drive pattern=` banner (HIL) |
+| `make term-build` / `term-flash` / `term-serial` / `term-test` | Glass TTY firmware (`crt_term`); `term-test` is unique `digest=` + UTF-8 line, or HIL skip if no Pico |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
 
 Build artifacts land on the bind mount (`hello_pico/build/`, repo `build/`), owned as your uid for non-USB `compose run`.
 
-Overrides: `PICO_BOARD=pico` (or `pico_w`), `CMAKE_BUILD_TYPE=Release`, `HELLO_IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
+Overrides: `PICO_BOARD=pico` (or `pico_w`), `CMAKE_BUILD_TYPE=Release`, `HELLO_IMAGE_ID=…`, `TERM_IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
 
 ## Hardware bring-up (`hello_pico`)
 
@@ -144,5 +145,6 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.dev
 ## Related
 
 - [Firmware plan](firmware-plan.md) — PIO / DMA once the toolchain and USB path are trusted
+- [Terminal emulator](terminal-plan.md) — glass TTY firmware (`crt_term`), separate from patterns
 - [Hardware design](hardware-design.md) — GPIO map and 78 Hz timings
 - [KiCad carrier](kicad/crt-drive/) — Pico + 74AHCT125 protoboard
