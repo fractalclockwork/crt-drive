@@ -58,9 +58,11 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make pico-discover` | Host `lsusb` / `/dev/serial/by-id` / tty; skip picotool unless BOOTSEL |
 | `make hello-test` | Build, flash, and USB ping `hello_pico` (unique `digest=`) |
 | `make hello-build` / `hello-flash` / `hello-serial` | Steps of `hello-test` |
-| `make build` | CRT firmware at repo root (`main.c` + `.pio`) |
+| `make build` | Pattern firmware (`crt_drive`; [`pattern/main.c`](../pattern/main.c) + [`video/`](../video/)) |
 | `make rebuild` | Wipe `build/` then CRT cmake/ninja |
 | `make flash` | Load `build/crt_drive.uf2` with the same flash helper as hello |
+| `make serial` | USB CDC: type `1`–`5` (or `c`/`i`/`f`/`n`/`o`) to switch test patterns (BOOTSEL also cycles) |
+| `make serial-check` | Wait for `crt-drive pattern=` banner (HIL) |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
 
 Build artifacts land on the bind mount (`hello_pico/build/`, repo `build/`), owned as your uid for non-USB `compose run`.
@@ -137,7 +139,7 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.dev
 | `picotool info` “no BOOTSEL” but `2e8a:000a` | Firmware is running. Use `make hello-serial`, not `picotool info`. |
 | `load -f` times out after reboot | CDC serial ≠ BOOTSEL serial. Use `make hello-flash` / `flash.sh`. |
 | `Pico did not enter BOOTSEL` | Need `reboot -u -f`, or hold BOOTSEL on plug-in. |
-| `make build` missing `main.c` / `.pio` | Unexpected now — those files are in the repo root. |
+| `make build` missing `pattern/main.c` / `video/*.pio` | Unexpected now — those files are under `pattern/` and `video/`. |
 
 ## Related
 

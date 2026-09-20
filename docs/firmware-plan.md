@@ -1,6 +1,6 @@
 # Firmware plan
 
-RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`main.c`](../main.c), [`video_pixel.pio`](../video_pixel.pio), [`hsync.pio`](../hsync.pio), [`vsync.pio`](../vsync.pio). First image is 78 Hz crosshatch.
+RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`pattern/main.c`](../pattern/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns.
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
@@ -38,7 +38,7 @@ Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PI
 
 ### PIO wrap totals
 
-[`hsync.pio`](../hsync.pio) wrap is **1530** dots (960 high active+FP, 140 low sync, 430 high BP). [`vsync.pio`](../vsync.pio) wrap is **402** IRQ-paced lines (398 high + 4 low). The sketches below are historical; they do **not** add up and are not what is in the `.pio` files:
+[`hsync.pio`](../video/hsync.pio) wrap is **1530** dots (960 high active+FP, 140 low sync, 430 high BP). [`vsync.pio`](../video/vsync.pio) wrap is **402** IRQ-paced lines (398 high + 4 low). The sketches below are historical; they do **not** add up and are not what is in the `.pio` files:
 
 - **HSYNC draft:** `set pins,1 [9]` (10) + `set x,30` (1) + 31×32 (992) + `set x,11` (1) + 12×32 (384) = **1388** high, not 1390. Low side: `set pins,0 [7]` (8) + `set x,3` (1) + 4×32 (128) + `irq 0` (1) = **138** low, not 140. Line total **1526**, not 1530.
 - **VSYNC draft:** `set x,31` then `wait`/`jmp` is 32 lines; plus `set x,11` is 12 more → **44** high lines, not 398. The 4-line low loop is the only part that matches.
@@ -82,7 +82,7 @@ Porch *split* (800/160/140/430 and 338/12/4/48) is still a **working hypothesis*
 - [x] /VSYNC: 78.041 Hz, active-low, 4-line pulse (0.128 ms) — scope
 - [x] Line period 31.875 us, frame period 12.813 ms — scope
 - [x] Enable SMs in lockstep so VSYNC IRQ alignment is repeatable
-- [x] PIO wrap totals 1530 dots / 402 lines (see [`hsync.pio`](../hsync.pio), [`vsync.pio`](../vsync.pio))
+- [x] PIO wrap totals 1530 dots / 402 lines (see [`hsync.pio`](../video/hsync.pio), [`vsync.pio`](../video/vsync.pio))
 
 Historical sketch (wrong counts; not the repo sources):
 
@@ -268,10 +268,13 @@ Implemented DMA is per-line (51 words), not this whole-frame `TOTAL_FRAME_WORDS`
 
 ### 5. Test patterns
 
-Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. Optional USB-CDC or later key emulation (`Ctrl+Shift+F1` … `F4`) can switch patterns; that UI is not required for first light.
+Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. USB CDC (`1`/`c`, `2`/`i`, `3`/`f`, `4`/`n`, `5`/`o`) selects a pattern; a short BOOTSEL press cycles the same order. Both rewrite `frame_buffer` while DMA runs. Factory-key emulation is still optional later UI.
 
-- [x] Crosshatch generator in [`main.c`](../main.c) (grid, bold box, bold reticle)
-- [ ] Intensity bars / focus matrix / full-on
+- [x] Crosshatch generator in [`pattern/main.c`](../pattern/main.c) (grid, bold box, bold reticle)
+- [x] Intensity bars / focus matrix / full-on
+- [x] RCA Indian Head (letterboxed 4:3 + V0/V1 side columns)
+- [x] USB CDC pattern select (`make serial`)
+- [x] BOOTSEL cycles patterns (flash-CS sample from RAM)
 - [x] Scope: V0/V1 pattern vs /HSYNC (vertical bars every 1.667 us)
 - [ ] CRT after isolation and 5 V level shift
 
@@ -279,10 +282,11 @@ Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is
 | --- | --- | --- |
 | Crosshatch | Bold overscan box; vertical every 80 px; horizontal every 13 lines; bold center reticle | Size, centering, linearity, pincushion |
 | Intensity bars | Four horizontal bands: off, dim, normal, bold | Brightness / contrast, no bloom |
-| Focus matrix | Dense `H` or `E` in 10 × 13 cells (132 later if needed) | Center/corner focus |
+| Focus matrix | Dense `H` in 10 × 13 cells (132 later if needed) | Center/corner focus |
+| Indian Head | Letterboxed RCA card; V0 / V1 / bold patches; resolution bursts | Geometry, grayscale, bandwidth |
 | Full-on box | All pixels bold | Max beam current, 78 Hz overscan |
 
-Sketch for the first two (helpers from phase 3). Crosshatch draw order: grid, then bold box and reticle. Crosshatch is in `main.c`; intensity bars are still a sketch.
+Sketch for crosshatch (helpers from phase 3). Draw order: grid, then bold box and reticle. Pattern generators are in [`pattern/main.c`](../pattern/main.c); intensity bars pack each line (84 / 84 / 85 / 85) and leave the trailing off word blank. Indian Head is a packed 2 bpp blit.
 
 ```c
 void generate_crosshatch_pattern(void) {
@@ -321,18 +325,22 @@ void generate_crosshatch_pattern(void) {
 }
 
 void generate_intensity_bars(void) {
-    uint16_t bar_height = FRAME_HEIGHT / 4;
+    static const PixelColor bands[4] = {
+        PIXEL_OFF, PIXEL_DIM, PIXEL_NORMAL, PIXEL_BOLD
+    };
+    const uint16_t base = FRAME_HEIGHT / 4; /* 84, remainder 2 → last two bands 85 */
+    const uint16_t rem = FRAME_HEIGHT % 4;
+    uint16_t y = 0;
 
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        PixelColor row_color;
-        if (y < bar_height)          row_color = PIXEL_OFF;
-        else if (y < bar_height * 2) row_color = PIXEL_DIM;
-        else if (y < bar_height * 3) row_color = PIXEL_NORMAL;
-        else                         row_color = PIXEL_BOLD;
-
-        uint8_t packed_byte = (row_color << 6) | (row_color << 4)
-                            | (row_color << 2) | row_color;
-        memset(frame_buffer[y], packed_byte, BYTES_PER_LINE);
+    for (int i = 0; i < 4; i++) {
+        uint16_t h = (uint16_t)(base + (i >= (4 - (int)rem) ? 1 : 0));
+        uint16_t y_end = (uint16_t)(y + h);
+        for (; y < y_end; y++) {
+            uint8_t packed_byte = (uint8_t)((bands[i] << 6) | (bands[i] << 4)
+                                          | (bands[i] << 2) | bands[i]);
+            memset(frame_buffer[y], packed_byte, BYTES_PER_LINE);
+            memset(&frame_buffer[y][BYTES_PER_LINE], 0, LINE_STRIDE - BYTES_PER_LINE);
+        }
     }
 }
 ```
@@ -366,4 +374,4 @@ On the CRT (after isolation and 5 V level shift):
 2. ~~Pixel SM blanking: stall vs padded full-raster DMA~~ — FIFO stall + trailing off word.
 3. Confirm 78 Hz porch *widths* on a WY-120 before freezing delays (wrap *totals* 1530/402 and line/frame rates checked out on a Pico GPIO scope).
 4. 60 Hz porches TBD (Appendix B has active size and rates only).
-5. Factory-key pattern switching is optional UI, not v1.
+5. Factory-key pattern switching is optional UI; USB CDC and BOOTSEL are the analog-setup switch.
