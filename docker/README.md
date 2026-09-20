@@ -11,6 +11,7 @@ make image          # crt-drive/pico-dev:local
 make smoke          # compilers + Pico SDK + picotool USB
 make pico-discover  # Pico on this machine's USB
 make hello-test     # build, flash, CDC ping
+make build          # analog-setup patterns (default)
 make help           # all targets
 ```
 

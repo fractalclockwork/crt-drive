@@ -1,6 +1,6 @@
 # Test patterns
 
-Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Generators are in [`pattern/main.c`](../pattern/main.c); the RCA Indian Head raster is packed by [`tools/pack_indian_head.py`](../tools/pack_indian_head.py). PIO / packing live in [`video/`](../video/).
+Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Generators are in [`apps/patterns/main.c`](../apps/patterns/main.c); the RCA Indian Head raster is packed by [`tools/pack_indian_head.py`](../tools/pack_indian_head.py). PIO / packing live in [`video/`](../video/).
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 

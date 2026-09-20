@@ -58,16 +58,20 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make pico-discover` | Host `lsusb` / `/dev/serial/by-id` / tty; skip picotool unless BOOTSEL |
 | `make hello-test` | Build, flash, and USB ping `hello_pico` (unique `digest=`) |
 | `make hello-build` / `hello-flash` / `hello-serial` | Steps of `hello-test` |
-| `make build` | Pattern firmware (`crt_drive`; [`pattern/main.c`](../pattern/main.c) + [`video/`](../video/)) |
-| `make rebuild` | Wipe `build/` then CRT cmake/ninja |
-| `make flash` | Load `build/crt_drive.uf2` with the same flash helper as hello |
+| `make build` | Default CRT app: analog-setup patterns ([`apps/patterns`](../apps/patterns/) → `build/patterns/crt_drive.uf2`) |
+| `make rebuild` | Wipe `build/<app>` then build that app (`APP=patterns` default) |
+| `make flash` | Load the current `APP` UF2 (`crt_drive` unless `APP=…`) |
 | `make serial` | USB CDC: type `1`–`5` (or `c`/`i`/`f`/`n`/`o`) to switch test patterns (BOOTSEL also cycles) |
 | `make serial-check` | Wait for `crt-drive pattern=` banner (HIL) |
+| `make APP=term build` / `flash` | Glass TTY ([`apps/term`](../apps/term/) → `build/term/crt_term.uf2`) |
+| `make term-build` / `term-flash` / `term-serial` / `term-test` | Aliases for the term app; `term-test` is unique `digest=` + UTF-8, or HIL skip |
+| `make APP=demos build` / `flash` | Phosphor reel ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
+| `make demos-build` / `demos-flash` / `demos-serial` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
 
-Build artifacts land on the bind mount (`hello_pico/build/`, repo `build/`), owned as your uid for non-USB `compose run`.
+Build artifacts land on the bind mount (`hello_pico/build/`, `build/<app>/`), owned as your uid for non-USB `compose run`.
 
-Overrides: `PICO_BOARD=pico` (or `pico_w`), `CMAKE_BUILD_TYPE=Release`, `HELLO_IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
+Overrides: `PICO_BOARD=pico` (or `pico_w`), `APP=patterns` (or `term`, `demos`), `CMAKE_BUILD_TYPE=Release`, `HELLO_IMAGE_ID=…`, `TERM_IMAGE_ID=…`, `DEMO_IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
 
 ## Hardware bring-up (`hello_pico`)
 
@@ -139,10 +143,12 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.dev
 | `picotool info` “no BOOTSEL” but `2e8a:000a` | Firmware is running. Use `make hello-serial`, not `picotool info`. |
 | `load -f` times out after reboot | CDC serial ≠ BOOTSEL serial. Use `make hello-flash` / `flash.sh`. |
 | `Pico did not enter BOOTSEL` | Need `reboot -u -f`, or hold BOOTSEL on plug-in. |
-| `make build` missing `pattern/main.c` / `video/*.pio` | Unexpected now — those files are under `pattern/` and `video/`. |
+| `make build` missing `apps/patterns` / `video/*.pio` | Unexpected now — those files are under `apps/patterns/` and `video/`. |
 
 ## Related
 
 - [Firmware plan](firmware-plan.md) — PIO / DMA once the toolchain and USB path are trusted
+- [Terminal emulator](terminal-plan.md) — glass TTY app (`make APP=term build`)
+- [Phosphor demos](demo-plan.md) — attract reel (`make APP=demos build`)
 - [Hardware design](hardware-design.md) — GPIO map and 78 Hz timings
 - [KiCad carrier](kicad/crt-drive/) — Pico + 74AHCT125 protoboard

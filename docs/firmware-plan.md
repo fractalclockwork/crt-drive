@@ -1,6 +1,6 @@
 # Firmware plan
 
-RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`pattern/main.c`](../pattern/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns.
+RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`apps/patterns/main.c`](../apps/patterns/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns. Other firmware apps (glass TTY, phosphor reel) live under [`apps/`](../apps/) and build separately. Terminal emulator: [terminal-plan.md](terminal-plan.md). Phosphor demos: [demo-plan.md](demo-plan.md).
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
@@ -28,13 +28,13 @@ Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PI
 
 ## PIO mapping
 
-**Decided.** Three SMs, matching [`CMakeLists.txt`](../CMakeLists.txt).
+**Decided.** Three SMs, matching [`video/CMakeLists.txt`](../video/CMakeLists.txt).
 
 | | Three SMs (implemented) |
 | --- | --- |
 | Pixel | SM0: `out pins, 2` to V0/V1 |
 | Timing | SM1: /HSYNC; SM2: /VSYNC, `wait` on IRQ 0 from HSYNC |
-| CMake | `pico_generate_pio_header` for `video_pixel.pio`, `hsync.pio`, `vsync.pio` |
+| CMake | `pico_generate_pio_header` in [`video/CMakeLists.txt`](../video/CMakeLists.txt); each app under [`apps/`](../apps/) is its own project |
 
 ### PIO wrap totals
 
@@ -270,7 +270,7 @@ Implemented DMA is per-line (51 words), not this whole-frame `TOTAL_FRAME_WORDS`
 
 Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. USB CDC (`1`/`c`, `2`/`i`, `3`/`f`, `4`/`n`, `5`/`o`) selects a pattern; a short BOOTSEL press cycles the same order. Both rewrite `frame_buffer` while DMA runs. Factory-key emulation is still optional later UI.
 
-- [x] Crosshatch generator in [`pattern/main.c`](../pattern/main.c) (grid, bold box, bold reticle)
+- [x] Crosshatch generator in [`apps/patterns/main.c`](../apps/patterns/main.c) (grid, bold box, bold reticle)
 - [x] Intensity bars / focus matrix / full-on
 - [x] RCA Indian Head (letterboxed 4:3 + V0/V1 side columns)
 - [x] USB CDC pattern select (`make serial`)
@@ -286,7 +286,7 @@ Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is
 | Indian Head | Letterboxed RCA card; V0 / V1 / bold patches; resolution bursts | Geometry, grayscale, bandwidth |
 | Full-on box | All pixels bold | Max beam current, 78 Hz overscan |
 
-Sketch for crosshatch (helpers from phase 3). Draw order: grid, then bold box and reticle. Pattern generators are in [`pattern/main.c`](../pattern/main.c); intensity bars pack each line (84 / 84 / 85 / 85) and leave the trailing off word blank. Indian Head is a packed 2 bpp blit.
+Sketch for crosshatch (helpers from phase 3). Draw order: grid, then bold box and reticle. Pattern generators are in [`apps/patterns/main.c`](../apps/patterns/main.c); intensity bars pack each line (84 / 84 / 85 / 85) and leave the trailing off word blank. Indian Head is a packed 2 bpp blit.
 
 ```c
 void generate_crosshatch_pattern(void) {
