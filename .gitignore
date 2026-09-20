@@ -44,6 +44,10 @@ _autosave-*
 **/__pycache__/
 *.py[cod]
 
+# Indian Head intermediate rasters (regenerate with tools/pack_indian_head.py)
+assets/indian_head/render_*.png
+assets/indian_head/portrait_crop.png
+
 # --- Ephemeral ---
 .tmp/
 .tmp.*

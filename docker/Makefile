@@ -51,18 +51,20 @@ HELLO_IMAGE_ID ?=
 CMAKE_BUILD_TYPE ?= Release
 
 .PHONY: help print-host-platform build-images build-images-host smoke build rebuild \
-	shell shell-usb flash picotool-info setup-binfmt pico-discover \
+	shell shell-usb flash serial serial-check picotool-info setup-binfmt pico-discover \
 	hello-build hello-flash hello-serial hello-test
 
 help:
 	@echo "crt-drive pico-dev (Dev-Host, no gateway)"
 	@echo "  make build-images   — build crt-drive/pico-dev:local for this machine"
 	@echo "  make smoke          — compilers, SDK path, picotool with USB support"
-	@echo "  make build          — cmake/ninja CRT firmware (crosshatch)"
+	@echo "  make build          — cmake/ninja CRT firmware (test patterns)"
 	@echo "  make rebuild        — wipe build/ then build"
 	@echo "  make shell          — interactive shell in pico-dev"
 	@echo "  make shell-usb      — same, with /dev/bus/usb (privileged)"
 	@echo "  make flash          — picotool load $(UF2) (Pico on this host)"
+	@echo "  make serial         — USB CDC: type 1-5 to switch CRT patterns"
+	@echo "  make serial-check   — wait for crt-drive pattern= banner"
 	@echo "  make pico-discover  — lsusb / by-id on host, picotool info in container"
 	@echo "  make hello-build    — USB bring-up firmware (hello_pico)"
 	@echo "  make hello-flash    — picotool load $(HELLO_UF2)"
@@ -105,6 +107,16 @@ shell-usb:
 
 flash:
 	$(COMPOSE_USB) run --rm --no-deps pico-dev bash -lc 'set -euo pipefail; test -f $(UF2) || { echo "missing $(UF2) — run make build first" >&2; exit 1; }; bash /workspace/hello_pico/tools/flash.sh $(UF2)'
+
+serial:
+	$(COMPOSE_USB) run --rm --no-deps -it \
+		$(if $(strip $(PICO_PORT)),-e PICO_PORT="$(PICO_PORT)",) \
+		pico-dev bash -lc 'python3 /workspace/tools/crt_serial.py'
+
+serial-check:
+	$(COMPOSE_USB) run --rm --no-deps \
+		$(if $(strip $(PICO_PORT)),-e PICO_PORT="$(PICO_PORT)",) \
+		pico-dev bash -lc 'python3 /workspace/tools/crt_serial.py --check'
 
 picotool-info:
 	$(COMPOSE_USB) run --rm --no-deps pico-dev bash -lc 'picotool info -a || picotool info'

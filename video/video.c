@@ -1,44 +1,17 @@
-#include <stdio.h>
 #include <string.h>
-#include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
 
+#include "video.h"
 #include "video_pixel.pio.h"
 #include "hsync.pio.h"
 #include "vsync.pio.h"
 
-#define PIN_V0      0
-#define PIN_V1      1
-#define PIN_HSYNC   2
-#define PIN_VSYNC   3
+#define PIO_IRQ_REWIND 2
 
-#define SM_PIXEL    0
-#define SM_HSYNC    1
-#define SM_VSYNC    2
-
-#define CRT_SYS_CLK_KHZ 144000
-#define PIO_CLKDIV      3.0f
-
-#define FRAME_WIDTH     800
-#define FRAME_HEIGHT    338
-#define LINES_PER_FRAME 402
-#define BYTES_PER_LINE  (FRAME_WIDTH / 4)   /* 200 */
-#define LINE_STRIDE     204                 /* 200 + 4 trailing off pixels */
-#define WORDS_PER_LINE  (LINE_STRIDE / 4)   /* 51 */
-
-#define PIO_IRQ_REWIND  2
-
-typedef enum {
-    PIXEL_OFF    = 0b00,
-    PIXEL_DIM    = 0b01,
-    PIXEL_NORMAL = 0b10,
-    PIXEL_BOLD   = 0b11
-} PixelColor;
-
-static uint8_t frame_buffer[FRAME_HEIGHT][LINE_STRIDE] __attribute__((aligned(4)));
+uint8_t frame_buffer[FRAME_HEIGHT][LINE_STRIDE] __attribute__((aligned(4)));
 static uint32_t blank_line[WORDS_PER_LINE] __attribute__((aligned(4)));
 static const uint32_t *line_ptrs[LINES_PER_FRAME];
 static uint32_t dma_rx_dummy;
@@ -46,6 +19,10 @@ static uint32_t dma_rx_dummy;
 static int data_chan;
 static int drain_chan;
 static int kick_chan;
+
+uint8_t packed_color(PixelColor color) {
+    return (uint8_t)((color << 6) | (color << 4) | (color << 2) | color);
+}
 
 void set_pixel(uint16_t x, uint16_t y, PixelColor color) {
     if (x >= FRAME_WIDTH || y >= FRAME_HEIGHT) {
@@ -60,7 +37,7 @@ void set_pixel(uint16_t x, uint16_t y, PixelColor color) {
 }
 
 void clear_buffer(PixelColor color) {
-    uint8_t packed_byte = (uint8_t)((color << 6) | (color << 4) | (color << 2) | color);
+    uint8_t packed_byte = packed_color(color);
     memset(frame_buffer, packed_byte, sizeof(frame_buffer));
     if (color != PIXEL_OFF) {
         for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
@@ -69,41 +46,9 @@ void clear_buffer(PixelColor color) {
     }
 }
 
-void generate_crosshatch_pattern(void) {
-    clear_buffer(PIXEL_OFF);
-
-    for (uint16_t x = 80; x < FRAME_WIDTH - 1; x += 80) {
-        for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
-    }
-    for (uint16_t y = 13; y < FRAME_HEIGHT - 1; y += 13) {
-        for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
-    }
-
-    for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-        set_pixel(x, 0, PIXEL_BOLD);
-        set_pixel(x, FRAME_HEIGHT - 1, PIXEL_BOLD);
-    }
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        set_pixel(0, y, PIXEL_BOLD);
-        set_pixel(FRAME_WIDTH - 1, y, PIXEL_BOLD);
-    }
-
-    const uint16_t cx = FRAME_WIDTH / 2;   /* 400 */
-    const uint16_t cy = FRAME_HEIGHT / 2;  /* 169 */
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        set_pixel(cx - 1, y, PIXEL_BOLD);
-        set_pixel(cx,     y, PIXEL_BOLD);
-        set_pixel(cx + 1, y, PIXEL_BOLD);
-    }
-    for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-        set_pixel(x, cy - 1, PIXEL_BOLD);
-        set_pixel(x, cy,     PIXEL_BOLD);
-        set_pixel(x, cy + 1, PIXEL_BOLD);
-    }
+void fill_active_line(uint16_t y, PixelColor color) {
+    memset(frame_buffer[y], packed_color(color), BYTES_PER_LINE);
+    memset(&frame_buffer[y][BYTES_PER_LINE], 0, LINE_STRIDE - BYTES_PER_LINE);
 }
 
 static void pio_rewind_irq(void) {
@@ -213,26 +158,13 @@ static void setup_framebuffer_dma(PIO pio) {
     dma_channel_start(drain_chan);
 }
 
-int main(void) {
+void video_set_sys_clock(void) {
     set_sys_clock_khz(CRT_SYS_CLK_KHZ, true);
-    stdio_init_all();
+}
 
-#ifdef PICO_DEFAULT_LED_PIN
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-#endif
-
-    generate_crosshatch_pattern();
+void video_start(PIO pio) {
     init_line_table();
-    init_crt_pio(pio0);
-    setup_framebuffer_dma(pio0);
-    pio_enable_sm_mask_in_sync(pio0, (1u << SM_PIXEL) | (1u << SM_HSYNC) | (1u << SM_VSYNC));
-
-    while (true) {
-#ifdef PICO_DEFAULT_LED_PIN
-        gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
-#endif
-        printf("crt-drive crosshatch 78Hz\n");
-        sleep_ms(250);
-    }
+    init_crt_pio(pio);
+    setup_framebuffer_dma(pio);
+    pio_enable_sm_mask_in_sync(pio, (1u << SM_PIXEL) | (1u << SM_HSYNC) | (1u << SM_VSYNC));
 }

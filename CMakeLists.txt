@@ -14,33 +14,27 @@ set(CMAKE_CXX_STANDARD 17)
 # Initialize the SDK
 pico_sdk_init()
 
-# Define the target executable and source files
-add_executable(crt_drive
-    main.c
-)
-
-# Generate C header files (.h) from PIO source files (.pio)
-pico_generate_pio_header(crt_drive ${CMAKE_CURRENT_LIST_DIR}/video_pixel.pio)
-pico_generate_pio_header(crt_drive ${CMAKE_CURRENT_LIST_DIR}/hsync.pio)
-pico_generate_pio_header(crt_drive ${CMAKE_CURRENT_LIST_DIR}/vsync.pio)
-
-# Include directories so generated headers are found
-target_include_directories(crt_drive PRIVATE
+# Shared 78 Hz 80-col scanout (PIO + DMA + packing).
+add_library(crt_video video/video.c)
+pico_generate_pio_header(crt_video ${CMAKE_CURRENT_LIST_DIR}/video/video_pixel.pio)
+pico_generate_pio_header(crt_video ${CMAKE_CURRENT_LIST_DIR}/video/hsync.pio)
+pico_generate_pio_header(crt_video ${CMAKE_CURRENT_LIST_DIR}/video/vsync.pio)
+target_include_directories(crt_video PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/video
 )
-
-# Link required RP2040 hardware drivers
-target_link_libraries(crt_drive
+target_link_libraries(crt_video PUBLIC
     pico_stdlib
     hardware_pio
     hardware_dma
     hardware_clocks
 )
 
-# Enable USB CDC terminal output for serial debugging
+# Analog-setup patterns (service tool).
+add_executable(crt_drive
+    pattern/main.c
+)
+target_link_libraries(crt_drive crt_video)
 pico_enable_stdio_usb(crt_drive 1)
 pico_enable_stdio_uart(crt_drive 0)
-
-# Generate UF2, HEX, and BIN build outputs
 pico_add_extra_outputs(crt_drive)
