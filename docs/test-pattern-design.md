@@ -1,18 +1,16 @@
 # Test patterns
 
-Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Generators are in [`apps/patterns/main.c`](../apps/patterns/main.c); the RCA Indian Head raster is packed by [`tools/pack_indian_head.py`](../tools/pack_indian_head.py). PIO / packing live in [`video/`](../video/).
+Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and pads live in [hardware-design.md](hardware-design.md). PIO, DMA, packing, and `set_pixel` live in [firmware-plan.md](firmware-plan.md). Generators are in [`apps/pattern/main.c`](../apps/pattern/main.c); the RCA Indian Head raster is packed by [`tools/pack_indian_head.py`](../tools/pack_indian_head.py). PIO / packing live in [`video/`](../video/).
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
-**Decided for v1:** five patterns on the 78 Hz active raster (800 × 338 @ 2 bpp). Pico draws them; factory keyboard chords are not required. USB CDC selects a pattern (`1`/`c` crosshatch, `2`/`i` intensity, `3`/`f` focus, `4`/`n` indian-head, `5`/`o` full-on). A short **BOOTSEL** press cycles that same order. Boot default is crosshatch. Hold BOOTSEL while plugging USB to enter the bootloader as usual.
+**Decided for v1:** analog setup is the standalone measure app ([`apps/cross60`](../apps/cross60/), `make test` then `make monitor`). USB: `4` box+grid+plus, `m` 80/132-col, `r` 60/78 Hz, `a`/`d` H phase, `w`/`s` V porch — no reflash. HIL on this MC5 is recorded below. Six 78 Hz drawings stay on `make test APP=pattern` and are **not** updated yet; fold the cross60 record into them later.
 
-**Working hypothesis:** exact line/pixel coordinates below. Confirm on the CRT after isolation at pads V0, V1, V, H, and GND.
+**Working hypothesis:** exact line/pixel coordinates for the six `apps/pattern` drawings (still 800 × 338).
 
 ## Role
 
-Firmware **phase 5**. One `generate_*` fills `frame_buffer` before the DMA loop starts; CDC keys and BOOTSEL rewrite the same buffer while DMA continues. Analog setup uses these as visual targets; this doc is the drawing spec, not the PIO how-to.
-
-First target is the Link MC5 / WY-120 78 Hz mode. Other CRT or TV profiles reuse the same pattern *ideas* with a different active size and output stage.
+Firmware **phase 5**. [`apps/cross60`](../apps/cross60/) is the live analog-setup drawing (box, grid, plus) at four Appendix B rates. [`apps/pattern`](../apps/pattern/) still has the six 78 Hz pictures on a 338-line raster. This doc is the drawing spec and the HIL record, not the PIO how-to.
 
 ## Luminance and packing
 
@@ -27,17 +25,110 @@ Same 2-bit field as the hardware luminance table and the firmware `PixelColor` e
 
 Use `set_pixel` / `clear_buffer` from the firmware plan. Do not invent a second packing helper.
 
-## Patterns
+## Standalone measure ([`apps/cross60`](../apps/cross60/))
+
+This is the only drawing in active HIL. Boot **60 Hz 80-col** measure. USB CDC (`make monitor`):
+
+| Key | Drawing | Analog use |
+| --- | --- | --- |
+| `4` meas (boot) | Bold raster box; normal grid; bold plus at center | Deflection (box vs bezel), cell pitch for linearity |
+| `2` box | Raster-edge rectangle only | H/V size, overscan |
+| `3` grid | Cell grid + plus | Linearity, pincushion |
+| `1` plus | One-pixel H and V through center | Phase |
+| `m` | Toggle 80-col / 132-col | Appendix B widths; H timing stays with column count |
+| `r` | Toggle 60 Hz / 78 Hz | 416/523 vs 377/402; same H as the current column mode |
+| `a`/`d` | H phase ±16 px (leading DMA zeros; later = right) | Digital H position without reflash |
+| `w`/`s` | V back porch ±1 line (up/down) | Digital V position without reflash |
+| `0` | hpad=0, vbp=mode default (51 @ 60 Hz, 8 @ 78 Hz) | Restore firmware default |
+
+`r` also drives **GP4** high in 78 Hz (U6 pin 5 / **VR301** select). That is mode-select, not a signal-integrity pin. Lift the 8032 pin first if that MCU still drives it.
+
+### HIL record (this MC5 / WY-120)
+
+Bezel **24.6 cm × 19.0 cm**. Factory Section 3: **11 mm ±2 mm** each side, both rates; **size then linearity**. Pots: **VR302** 60 Hz V-size, **VR301** 78 Hz V-size, **VR303** V-linearity (**shared**), **VR201** H-hold, **L201** H-width.
+
+**Analog order (decided).** Lock 60 Hz on the glass first (VR302, VR303, L201). Then switch `r` and fix 78 Hz in firmware. Do not reopen VR302/VR303/L201 for 78 Hz: VR303 is common, and VR302-min 60 Hz is already the factory 11 mm. A 12-line V-BP trim did **not** move a 3 cm top gap; extra VR303 with a short top ate the bottom (2.4 / 1.0 cm). Restoring 60 Hz analog restored 60 Hz and 78 Hz lost deflection again (3.5 / 1.6 cm at 338 lines).
+
+**Clock (decided).** Pico **PLL_SYS 128.4 MHz** for all four `cross60` modes so USB CDC stays up. Do not switch the PLL at runtime. Do not go back to a 48 MHz crystal story for this app.
+
+| Mode | Dot clock | Line | Active | `/HSYNC` | `/VSYNC` | Grid cells | Boxes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 60 Hz 80-col | 32.1 MHz (clkdiv 4) | 1024 | 800 × 416 | 113 FP / 111 sync / 0 BP | 50 FP / 6 sync / 51 BP | 40 × 26 | 20 × 16 |
+| 60 Hz 132-col | ~47.988 MHz (clkdiv 2.675) | 1530 | 1188 × 416 | 176 / 166 / 0 | same 523-line V | 54 × 26 | 22 × 16 |
+| 78 Hz 80-col | same 32.1 MHz as 80-col | 1024 | 800 × **377** | same 80-col H | 11 FP / 6 sync / 8 BP | 40 × **29** | 20 × 13 |
+| 78 Hz 132-col | same ~48 MHz as 132-col | 1530 | 1188 × **377** | same 132-col H | same 402-line V | 54 × **29** | 22 × 13 |
+
+78 Hz **keeps the current column H** so L201 width matches 60 Hz. Factory ASIC ran 78 Hz 80-col as 800/1530 @ 48 MHz; that would shrink the 80-col box on this HIL.
+
+**Packing (decided).** 2 bpp MSB-first, 32-bit LE DMA, PIO shift-left: `set_pixel` stores at `(x/4) ^ 3`. An 80 px grid hid the swap (lines at `x % 16 == 0`). A 40 px grid showed repeating **24 then 56** px pairs. Do not add a second vertical at `x = width-1` on top of the box (that made the last 80-col cell 79 px). Interior grid starts at one cell in; the bold box owns the raster edges.
+
+**60 Hz glass (decided).** Box **22.5 × 17.0 cm** (diag 28.3 cm) → 0.281 mm/px H, 0.409 mm/px V. Cells **~1.1 × 1.0 cm**. Pixels are not square; squaring with L201/VR302 would miss the 11 mm margins. VR302 at **minimum** is ~11 mm top and bottom. 5-dot earlier `/HSYNC` (111 vs 116) evened 14 vs 11 mm H toward 1 cm each side. Leave `vbp=51`. Both column modes filled the same sweep (20×16 vs 22×16 boxes).
+
+**78 Hz glass (decided).** With 60 Hz pots left at the 11 mm setup, Appendix B **338** active (26 × 13 character cells) is short: **1 cm** L/R (H is fine; leave L201), V **3.5 cm** top / **1.6 cm** bottom (~13.9 cm tall vs ~16.8 cm at 60 Hz). 13 rows is odd: the plus through the middle row is expected, not a mid-screen seam.
+
+Painting into that blanking has a hard stop. **390** active (13 × 30) with only 12 blank lines put the top box in retrace: first line missing at `vbp=2`, then a **hairline of the frame at the top-right** at `vbp=3`. That is unblanked flyback (left-to-right scan still climbing), not a drawing off-by-one in `draw_hline(0)`. This yoke needs ~0.5 ms after `/VSYNC` before video.
+
+Settled raster: **377** active (13 × 29), 25-line blank (**8 BP / 11 FP / 6 sync**). `vbp=12` was 1.8 / 1.5 cm; `vbp=8` centers (~**1.65 cm** each). Grid **~1 cm squares**. CDC: `crt-cross60 78Hz 80col meas hpad=0 vbp=8 vfp=11 vsize78=1`.
+
+| 78 Hz try | Blanking | Glass |
+| --- | --- | --- |
+| 338 / vbp=48 (Appendix B character raster) | 10 FP / 6 / 48 BP | 3.5 cm top / 1.6 cm bottom |
+| 390 / vbp=2…3 | 12 total | Top line in retrace (missing, then top-right hair) |
+| 377 / vbp=12 | 7 / 6 / 12 | 1.8 / 1.5 cm, top line visible |
+| 377 / vbp=8 (**keep**) | 11 / 6 / 8 | centered ~1.65 cm; ~1 cm cells |
+
+### Fold into `apps/pattern` later (do not change that app now)
+
+When the six 78 Hz drawings move off 338-line Appendix B geometry, copy these constraints — do not re-derive them from the old 100 mm-square math (that assumed 338 lines *filled* the 19 cm bezel):
+
+1. Same PLL 128.4 MHz and column H as `cross60` if L201 must match 60 Hz. The pattern app’s 144 MHz / 1530-dot 80-col line is a different H width.
+2. 78 Hz active **377**, not 338, if the box must fill like the measure pattern; V DMA **8 BP + 377 + 11 FP + 6 sync**.
+3. Do not eat blanking down to ~12 lines. Retrace symptoms: missing `y=0`, then a hairline at the **top-right**.
+4. `(x/4) ^ 3` packing; interior grid, box owns edges.
+5. ~1 cm cells on this tube are **40 × 29** at 80-col 78 Hz (20×13 boxes), not 80 × 13 character cells. 132-col pitch is **54 × 29** (22×13).
+6. Recompute the 100 mm square, Indian Head letterbox, intensity-band heights, and focus `H` grid from 377-line mm/px (~15.7 cm / 377), not 190 mm / 338.
+7. Dual-rate: never retune VR302/VR303 for a 78 Hz picture. VR301/GP4 is the 78-only size pot if it is wired.
+
+## 78 Hz drawings ([`apps/pattern`](../apps/pattern/), later)
+
+Still the Appendix B **10 × 13** character raster (800 × 338). These coordinates are **not** the HIL-settled 377-line measure pattern. Fold using the checklist above; do not edit this app until then.
 
 Character cell for 78 Hz, 80 columns: **10 × 13** (80 × 10 = 800 dots, 26 × 13 = 338 lines). Grid lines follow that cell, not a 26-line “square” pitch.
 
 | Pattern | Drawing | Analog use |
 | --- | --- | --- |
+| Sync-squares | Raster-edge box; 100 mm scale square; 80 × 80 px box; center cross | H/V phase, size, mm/px |
 | Crosshatch | Bold overscan box; normal lines every 80 px and every 13 lines; bold center reticle | Size, centering, linearity, pincushion |
 | Intensity bars | Four equal horizontal bands: off, dim, normal, bold | Brightness / contrast, bloom |
 | Focus matrix | Dense `H` in 10 × 13 cells, 80 × 26 (center cell bold) | Center and corner focus |
 | Indian Head | 4:3 RCA card letterboxed; V0/V1 side columns | Geometry, resolution, grayscale, channel ID |
 | Full-on box | Every active pixel bold | Max beam current, overscan limits |
+
+### Sync-squares
+
+**Working hypothesis.** Nested outlines plus a short center cross. The outer box is the full 800 × 338 active raster. The **100 mm square** is sized from the 25 cm × 19 cm bezel (not from glass mm/px), so it is a physical target: 100/250 × 800 = **320 px** wide, 100/190 × 338 ≈ **178 px** tall. The 80 × 80 pixel box stays for mm/px. Center is `(400, 169)`.
+
+Draw order: clear off, raster frame bold, 100 mm square bold, 80 × 80 normal, 3-pixel cross bold.
+
+| Feature | Coordinates | Intensity |
+| --- | --- | --- |
+| Background | Full 800 × 338 | Off |
+| Raster frame | `x = 0, 799` and `y = 0, 337` | Bold |
+| 100 mm square | `x = 240…559`, `y = 80…257` (320 × 178; 100 × 100 mm if the raster fills the bezel) | Bold |
+| 80 × 80 box | `x = 360…439`, `y = 129…208` | Normal |
+| Center cross | `x = 388…412` and `y = 157…181`, 3 px thick at (400, 169) | Bold |
+
+On the glass: measure the 100 mm square’s width and height as the scale baseline (pots will change it). Measure the cross to the four bezels for centering. The 80 × 80 still gives mm/px: inner width / 80 and inner height / 80. A missing left or top edge with a visible right/bottom edge is phase/porch, not H/V size.
+
+```c
+void generate_sync_squares_pattern(void) {
+    clear_buffer(PIXEL_OFF);
+    draw_rect_outline(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1, PIXEL_BOLD);
+    draw_centered_rect(400, 169, 320, 178, PIXEL_BOLD);
+    draw_centered_rect(400, 169, 80, 80, PIXEL_NORMAL);
+    draw_cross(400, 169, 12, PIXEL_BOLD);
+}
+```
 
 ### Crosshatch
 
@@ -169,17 +260,55 @@ Side columns use the leftover width for analog identity of **V0** and **V1**:
 ## Load order
 
 1. Init clock, PIO, and pins (phases 1–3).
-2. Call one `generate_*` so `frame_buffer` is non-zero where the pattern needs light (boot: crosshatch).
+2. Call one `generate_*` so `frame_buffer` is non-zero where the pattern needs light (boot: sync-squares).
 3. Start the DMA loop (phase 4). CDC keys or BOOTSEL rewrite the same buffer while the previous frame finishes; a torn frame during the fill is acceptable.
 
-On the bench, BOOTSEL cycles patterns with no host. On the Dev-Host, `make serial` (or any USB CDC terminal) selects a pattern by key; a breakpoint or `gdb` peek at `frame_buffer` is enough to prove packing before the CRT is connected.
+On the bench, BOOTSEL cycles patterns with no host. On the Dev-Host, `make monitor` (or any USB CDC terminal) selects a pattern by key; a breakpoint or `gdb` peek at `frame_buffer` is enough to prove packing before the CRT is connected.
 
 ## Analog use (WY-120 first target)
 
 After the harness is lifted at pads **V0**, **V1**, **V**, **H**, and **GND** and the 74AHCT125 is driving the load-side wires:
 
+**Measured** on this MC5: bezel opening **24.6 cm × 19.0 cm** (W × H), ~4:3 (24.6/19 = 1.295 vs 4/3 = 1.333). Glass origin is the **upper-left bezel corner**; firmware `(0, 0)` is the upper-left of the *active raster*, which matches that corner only when left/top margins are zero.
+
+| If the 78 Hz raster filled the bezel | Size |
+| --- | --- |
+| Outer frame | 24.6 cm × 19.0 cm |
+| Horizontal pitch | 246 mm / 800 = 0.3075 mm/px |
+| Vertical pitch | 190 mm / 338 ≈ 0.562 mm/px |
+| Inner 80 × 80 | **2.46 cm × 4.50 cm** (tall rectangle, ~1:1.83) |
+| Visual square | ~144 × 80 px → 4.43 cm × 4.50 cm |
+
+**Measured** on this MC5 with sync-squares, no chassis pot changes:
+
+| | Before V-porch DMA fix | After (48-line BP) |
+| --- | --- | --- |
+| Top | Cut off (overscan) | **30 mm** (frame fully visible) |
+| Bottom | 40 mm | **20 mm** |
+| Left | 87 mm | 87 mm |
+| Right | 12 mm | See H note below |
+| Inner 80 × 80 | 17 × 33 mm (~1:1.94) | **17 × 32 mm (~1:1.88)** |
+
+Vertical from the new gaps: active height 190 − 30 − 20 = **140 mm**. Center scale 32 mm / 80 px → 338 lines ≈ 135 mm (agrees). That 338-line picture is short once 60 Hz analog is locked; **do not open VR301/VR303 to chase it** if 60 Hz must stay at 11 mm — [`apps/cross60`](../apps/cross60/) fills in firmware (377 lines, ~1.65 cm V margins). See the HIL record above.
+
+Horizontal: a 17 mm inner box is still 80/800 of ~**170 mm** at center scale (same as before the porch change; H PIO did not move). A right gap of **11.0 cm** with left 8.7 cm would make the outer frame only 5.3 cm, which cannot contain a 1.7 cm / 80 px box at that scale. Treat **11.0 cm vs 1.10 cm** as a possible mix-up with the earlier 12 mm right gap; measure left-vertical to right-vertical as one length. **L201** expands H only after that width is confirmed; **VR201** centers it.
+
+**Measured** with [`apps/cross60`](../apps/cross60/) measure pattern (bold raster box, `hpad=0` `vbp=51`):
+
+| | As found | VR302 at minimum |
+| --- | --- | --- |
+| Box vs left bezel | **1.4 cm** | (H unchanged) |
+| Box vs right bezel | **1.1 cm** | (H unchanged) |
+| Box vs top bezel | **0.3 cm** | **~11 mm** |
+| Box vs bottom bezel | **0.3 cm** | **~11 mm** |
+
+V phase was already centered. **VR302 min hits the factory 11 mm ±2 mm** top/bottom (Section 3); there is no further analog shrink. 416 lines then span ~16.8 cm. Leave V porch at 51. H 5-dot earlier `/HSYNC` (111-dot pulse) is the flashed default so `a` is not required to even 14 vs 11 mm.
+
+The 78 Hz 3-pixel cross looking like an “H” was the stroke (`x = 399` and `401` with a missing `400`), not a failed `out pins, 2`.
+
 | Check | Expected |
 | --- | --- |
+| Sync-squares frame | Raster edges on the glass; 100 mm square → 100 × 100 mm at fill; cross at bezel center |
 | Crosshatch box | Visible on the overscan bounds; bold reticle at bezel center |
 | Grid cells | Equal 80 × 13 steps; use for H/V size, phase, linearity, pincushion |
 | Intensity bars | Four distinct levels, no smear or bloom into neighbors |
@@ -187,10 +316,10 @@ After the harness is lifted at pads **V0**, **V1**, **V**, **H**, and **GND** an
 | Indian Head | Circles round; wedges show H/V resolution; left bars are three distinct levels |
 | IC401 / neck | 0 V / +5 V on V0/V1 matching the luminance table |
 
-Chassis pot names vary; use whatever H-size, H-phase, V-size, V-pos, and pincushion controls the MC5 actually has. Do not work a powered chassis until the anode-cap discharge path is known.
+Chassis pots on this MC5: **VR301** 78 Hz V-size, **VR302** 60 Hz V-size (**min ≈ 11 mm** top/bottom on this tube), **VR303** V-linearity, **VR201** H-hold, **L201** H-width (11 mm ±2 mm each side). Do not work a powered chassis until the anode-cap discharge path is known.
 
 ## Open
 
 - Later key emulation (`Ctrl+Shift+F1` … `F4`) if a keyboard path is added; CDC and BOOTSEL are the analog-setup UI.
-- 60 Hz and non–WY-120 profiles: same patterns, new `FRAME_WIDTH` / `FRAME_HEIGHT`.
+- Fold the cross60 HIL record into [`apps/pattern`](../apps/pattern/) (still 338-line drawings).
 - 132-column focus matrix (9 × 13 cell) — later.

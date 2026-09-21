@@ -56,22 +56,24 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make shell` | Interactive bash; repo at `/workspace`; `PICO_SDK_PATH` set |
 | `make shell-usb` | Same, privileged, host `/dev` for picotool and ACM |
 | `make pico-discover` | Host `lsusb` / `/dev/serial/by-id` / tty; skip picotool unless BOOTSEL |
-| `make hello-test` | Build, flash, and USB ping `hello_pico` (unique `digest=`) |
-| `make hello-build` / `hello-flash` / `hello-serial` | Steps of `hello-test` |
-| `make build` | Default CRT app: analog-setup patterns ([`apps/patterns`](../apps/patterns/) → `build/patterns/crt_drive.uf2`) |
-| `make rebuild` | Wipe `build/<app>` then build that app (`APP=patterns` default) |
-| `make flash` | Load the current `APP` UF2 (`crt_drive` unless `APP=…`) |
-| `make serial` | USB CDC: type `1`–`5` (or `c`/`i`/`f`/`n`/`o`) to switch test patterns (BOOTSEL also cycles) |
-| `make serial-check` | Wait for `crt-drive pattern=` banner (HIL) |
-| `make APP=term build` / `flash` | Glass TTY ([`apps/term`](../apps/term/) → `build/term/crt_term.uf2`) |
-| `make term-build` / `term-flash` / `term-serial` / `term-test` | Aliases for the term app; `term-test` is unique `digest=` + UTF-8, or HIL skip |
-| `make APP=demos build` / `flash` | Phosphor reel ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
-| `make demos-build` / `demos-flash` / `demos-serial` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
+| `make hello-test` | Alias for `make test APP=hello`: build, flash, USB ping `hello_pico` (unique `digest=`) |
+| `make hello-build` / `hello-flash` / `hello-monitor` | Steps of `hello-test` |
+| `make build` | Default CRT app: 60 Hz 80-col plus ([`apps/cross60`](../apps/cross60/) → `build/cross60/crt_cross60.uf2`) |
+| `make rebuild` | Wipe `build/<app>` then build that app (`APP=cross60` default) |
+| `make flash` | Load the current `APP` UF2 (`crt_cross60` unless `APP=…`) |
+| `make monitor` | USB CDC for **whatever app is running** (banner detect). Optional `APP=` forces a dialect. |
+| `make test` | Unique id + flash + HIL for `APP` (default `cross60` → `crt-cross60` banner; skip if no Pico) |
+| `make build APP=pattern` / `flash` / `test` | 78 Hz analog-setup patterns ([`apps/pattern`](../apps/pattern/) → `build/pattern/crt_pattern.uf2`) |
+| `make build APP=term` / `flash` / `test` | Glass TTY ([`apps/term`](../apps/term/) → `build/term/crt_term.uf2`) |
+| `make term-build` / `term-flash` / `term-monitor` / `term-test` | Aliases for the term app |
+| `make build APP=demos` / `flash` / `test` | Phosphor reel ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
+| `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
+| `make build APP=cross60` / `flash` / `test` | Same as default; 60 Hz 1-pixel plus |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
 
 Build artifacts land on the bind mount (`hello_pico/build/`, `build/<app>/`), owned as your uid for non-USB `compose run`.
 
-Overrides: `PICO_BOARD=pico` (or `pico_w`), `APP=patterns` (or `term`, `demos`), `CMAKE_BUILD_TYPE=Release`, `HELLO_IMAGE_ID=…`, `TERM_IMAGE_ID=…`, `DEMO_IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
+Overrides: `PICO_BOARD=pico` (or `pico_w`), `APP=cross60` (or `pattern`, `term`, `demos`, `hello`), `CMAKE_BUILD_TYPE=Release`, `IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
 
 ## Hardware bring-up (`hello_pico`)
 
@@ -89,7 +91,7 @@ crt-drive hello_pico ok digest=<id>
 pong digest=<id>
 ```
 
-The firmware prints that banner on USB CDC @ 115200, blinks the onboard LED, and replies `pong` to `p`. Host check: [`hello_pico/tools/serial_ping.py`](../hello_pico/tools/serial_ping.py). Flash: [`hello_pico/tools/flash.sh`](../hello_pico/tools/flash.sh).
+The firmware prints that banner on USB CDC @ 115200, blinks the onboard LED, and replies `pong` to `p`. Host check: [`tools/monitor.py`](../tools/monitor.py) (`make monitor` / `make test APP=hello`). Flash: [`hello_pico/tools/flash.sh`](../hello_pico/tools/flash.sh).
 
 ### USB modes
 
@@ -102,9 +104,9 @@ The firmware prints that banner on USB CDC @ 115200, blinks the onboard LED, and
 
 Do **not** use `picotool load -f` against CDC firmware: application unique ID (example bench board `E660C06213580D29`) does not match RP2 Boot after reboot, so picotool waits for the wrong serial. `flash.sh` uses `picotool reboot -u -f` (USB BOOTSEL), then `picotool load -x` once BOOTSEL is visible.
 
-If force-reboot fails: hold **BOOTSEL**, plug USB, `make pico-discover` should show `2e8a:0003`, then `make hello-flash`.
+If force-reboot fails: hold **BOOTSEL**, plug USB, `make pico-discover` should show `2e8a:0003`, then `make flash APP=hello`.
 
-`ttyACM*` is `root:dialout`. Flash/serial Compose runs as root with `/dev` mounted so you do not need group `dialout` for `make hello-test`. Host tools (`minicom`, `cat /dev/ttyACM0`) do.
+`ttyACM*` is `root:dialout`. Flash/monitor Compose runs as root with `/dev` mounted so you do not need group `dialout` for `make test APP=hello`. Host tools (`minicom`, `cat /dev/ttyACM0`) do.
 
 ## Image layout
 
@@ -124,11 +126,11 @@ If force-reboot fails: hold **BOOTSEL**, plug USB, `make pico-discover` should s
 | SDK | `/opt/pico-sdk` |
 | picotool | `/usr/local` so CMake `find_package(picotool)` and USB load/reboot work |
 
-USB Compose is **not** merged for `make smoke` / `make hello-build` so ordinary compiles do not need privileged devices.
+USB Compose is **not** merged for `make smoke` / `make build APP=hello` so ordinary compiles do not need privileged devices.
 
 ## Agents
 
-Firmware and USB work use the existing Make targets, not a host SDK. Cursor: always-on rule [`.cursor/rules/pico-dev-toolchain.mdc`](../.cursor/rules/pico-dev-toolchain.mdc) and skill [`.cursor/skills/pico-dev-hil/SKILL.md`](../.cursor/skills/pico-dev-hil/SKILL.md) (`make help`, then `pico-discover` / `hello-test`).
+Firmware and USB work use the existing Make targets, not a host SDK. Cursor: always-on rule [`.cursor/rules/pico-dev-toolchain.mdc`](../.cursor/rules/pico-dev-toolchain.mdc) and skill [`.cursor/skills/pico-dev-hil/SKILL.md`](../.cursor/skills/pico-dev-hil/SKILL.md) (`make help`, then `pico-discover` / `make test APP=hello`).
 
 ## Cursor / VS Code
 
@@ -140,15 +142,15 @@ Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.dev
 |---------|----------------|
 | `permission denied … docker.sock` | Session missing group `docker`. Check `id`; log out/in, or rely on `with-docker.sh`. |
 | `\ntcmake: command not found` (or `\ntset`) | Old `with-docker.sh` quoting through dash. Current script POSIX-quotes; pull/update that file. |
-| `picotool info` “no BOOTSEL” but `2e8a:000a` | Firmware is running. Use `make hello-serial`, not `picotool info`. |
+| `picotool info` “no BOOTSEL” but `2e8a:000a` | Firmware is running. Use `make monitor` / `make hello-monitor`, not `picotool info`. |
 | `load -f` times out after reboot | CDC serial ≠ BOOTSEL serial. Use `make hello-flash` / `flash.sh`. |
 | `Pico did not enter BOOTSEL` | Need `reboot -u -f`, or hold BOOTSEL on plug-in. |
-| `make build` missing `apps/patterns` / `video/*.pio` | Unexpected now — those files are under `apps/patterns/` and `video/`. |
+| `make build` missing `apps/pattern` / `video/*.pio` | Unexpected now — those files are under `apps/pattern/` and `video/`. |
 
 ## Related
 
 - [Firmware plan](firmware-plan.md) — PIO / DMA once the toolchain and USB path are trusted
-- [Terminal emulator](terminal-plan.md) — glass TTY app (`make APP=term build`)
-- [Phosphor demos](demo-plan.md) — attract reel (`make APP=demos build`)
+- [Terminal emulator](terminal-plan.md) — glass TTY app (`make build APP=term`)
+- [Phosphor demos](demo-plan.md) — attract reel (`make build APP=demos`)
 - [Hardware design](hardware-design.md) — GPIO map and 78 Hz timings
 - [KiCad carrier](kicad/crt-drive/) — Pico + 74AHCT125 protoboard

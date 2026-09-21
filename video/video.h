@@ -18,7 +18,10 @@
 
 #define FRAME_WIDTH     800
 #define FRAME_HEIGHT    338
-#define LINES_PER_FRAME 402
+#define V_FRONT_PORCH   10
+#define V_SYNC_LINES    6
+#define V_BACK_PORCH    48
+#define LINES_PER_FRAME (FRAME_HEIGHT + V_FRONT_PORCH + V_SYNC_LINES + V_BACK_PORCH) /* 402 */
 #define BYTES_PER_LINE  (FRAME_WIDTH / 4)   /* 200 */
 #define LINE_STRIDE     204                 /* 200 + 4 trailing off pixels */
 #define WORDS_PER_LINE  (LINE_STRIDE / 4)   /* 51 */

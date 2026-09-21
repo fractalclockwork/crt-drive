@@ -8,7 +8,7 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-The pattern firmware (`crt_drive`) is the service tool: crosshatch, intensity, focus, Indian Head, full-on. This doc is the start of a real terminal emulator on the same injection path (Pico + 74AHCT125, pads V0/V1/H/V/GND).
+The pattern firmware (`crt_pattern`) is the service tool: sync-squares, crosshatch, intensity, focus, Indian Head, full-on. This doc is the start of a real terminal emulator on the same injection path (Pico + 74AHCT125, pads V0/V1/H/V/GND).
 
 **Decided for this slice:** glass TTY only. 78 Hz, 80×26, 10×13 cells, 7×10 glyphs. USB CDC is the host port. Character grid is the source of truth; `frame_buffer` is the scanout cache. No personality parser, keyboard, UART, or 132-column PIO.
 
@@ -29,7 +29,7 @@ TermCell[26][80]     (codepoint + reserved attr)
         v
 frame_buffer (800x338 @ 2 bpp)
         |
-        | DMA (shared with crt_drive)
+        | DMA (shared with crt_pattern)
         v
 PIO pixel / hsync / vsync  --> GPIO 0-3
 ```
@@ -38,10 +38,11 @@ Two UF2s, **separate CMake projects** under [`apps/`](../apps/):
 
 | Make | App | Role | CDC |
 | --- | --- | --- | --- |
-| `make build` / `make flash` | [`apps/patterns`](../apps/patterns/) (`crt_drive`) | Test patterns (default) | `1`–`5` / BOOTSEL; `pattern=` banner |
-| `make APP=term build` / `flash` | [`apps/term`](../apps/term/) (`crt_term`) | Glass TTY | host bytes; `crt-term digest=` banner |
+| `make build` / `make flash` | [`apps/pattern`](../apps/pattern/) (`crt_pattern`) | Analog-setup drawings (default) | `1`–`6` / BOOTSEL; `crt-pattern` banner |
+| `make build APP=term` / `flash` | [`apps/term`](../apps/term/) (`crt_term`) | Glass TTY | host bytes; `crt-term digest=` banner |
+| `make monitor` | running UF2 | CDC attach | banner detect |
 
-`make build` / `make flash` / `make serial` stay patterns. Terminal: `make term-build` / `term-flash` / `term-serial` / `term-test`.
+`make build` / `make flash` default to the pattern app. Terminal: `make term-build` / `term-flash` / `term-monitor` / `term-test` (or `APP=term`).
 
 ## 78 Hz display formats
 
@@ -51,7 +52,7 @@ From the WY-120 intro (26 lines in both). First slice implements the 80-column r
 | :---: | :---: | :---: | :---: | :---: | :---: | --- |
 | 78 Hz | 26 | 80 | 10×13 | 7×10 | 800×338 | **Decided** (same PIO as patterns) |
 | 78 Hz | 26 | 132 | 9×13 | 7×10 | 1188×338 | later; new `hsync` wrap |
-| 60 Hz | 26 | 80 / 132 | 10×16 / 9×16 | 7×12 | — | out of scope (do not invent porches) |
+| 60 Hz | 26 | 80 / 132 | 10×16 / 9×16 | 7×12 | 800×416 / 1188×416 | 60 Hz scanout in `cross60` (`m` toggles); TTY still 78 Hz |
 
 **Working hypothesis** for 132-column 78 Hz: line total stays 1530 dots @ 48 MHz (same 31.373 kHz H), so active 1188 + blanking 342. Cell is 9×13 with the same 7×10 glyph at origin (1, 1) and 1 px right margin. Framebuffer ≈ 338 × 300 bytes (~101 KB). Confirm porches on a WY-120 before freezing PIO delays.
 
@@ -131,8 +132,8 @@ Battery-backed setup RAM is not a v1 goal (Pico has no WY-120 battery SRAM).
 
 ## Verification
 
-- `make build` still produces `crt_drive` with `crt-drive pattern=` on CDC.
-- `make term-test`: Pico on USB → unique `digest=` then a canned UTF-8 line; no board (`make pico-discover` empty) → explicit HIL skip, not a pass.
+- `make build` still produces `crt_pattern` with `crt-pattern pattern=` on CDC.
+- `make test APP=term`: Pico on USB → unique `digest=` then a canned UTF-8 line; no board (`make pico-discover` empty) → explicit HIL skip, not a pass.
 - CRT after isolation and 5 V level shift: 80-col text on the same 78 Hz timing already checked out on a scope.
 
 ## Open

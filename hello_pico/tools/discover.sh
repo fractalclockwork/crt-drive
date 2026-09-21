@@ -29,8 +29,8 @@ if lsusb -d 2e8a:0003 >/dev/null 2>&1; then
   echo "BOOTSEL (2e8a:0003) — picotool can load a UF2; no USB serial until the app runs."
 elif lsusb -d 2e8a:000a >/dev/null 2>&1; then
   echo "Application USB CDC (2e8a:000a) — firmware is running (hello_pico / Pico SDK stdio)."
-  echo "This is the expected state after make hello-test. picotool info needs BOOTSEL;"
-  echo "serial ping uses the tty above (make hello-serial)."
+  echo "This is the expected state after make test APP=hello. picotool info needs BOOTSEL;"
+  echo "CDC attach uses the tty above (make monitor)."
 elif lsusb -d 2e8a: >/dev/null 2>&1; then
   echo "Raspberry Pi USB device present, but not the usual Pico CDC/BOOTSEL product IDs."
 else

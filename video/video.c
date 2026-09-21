@@ -29,7 +29,7 @@ void set_pixel(uint16_t x, uint16_t y, PixelColor color) {
         return;
     }
 
-    uint16_t byte_idx = x / 4;
+    uint16_t byte_idx = (uint16_t)((x / 4) ^ 3); /* 32-bit LE DMA; PIO shift left */
     uint8_t shift = (uint8_t)((3 - (x % 4)) * 2);
 
     frame_buffer[y][byte_idx] &= (uint8_t)~(0b11 << shift);
@@ -60,11 +60,15 @@ static void pio_rewind_irq(void) {
 
 static void init_line_table(void) {
     memset(blank_line, 0, sizeof(blank_line));
-    for (int y = 0; y < FRAME_HEIGHT; y++) {
-        line_ptrs[y] = (const uint32_t *)frame_buffer[y];
+    for (int n = 0; n < V_BACK_PORCH; n++) {
+        line_ptrs[n] = blank_line;
     }
-    for (int y = FRAME_HEIGHT; y < LINES_PER_FRAME; y++) {
-        line_ptrs[y] = blank_line;
+    for (int y = 0; y < FRAME_HEIGHT; y++) {
+        line_ptrs[V_BACK_PORCH + y] = (const uint32_t *)frame_buffer[y];
+    }
+    const int tail = V_BACK_PORCH + FRAME_HEIGHT;
+    for (int n = 0; n < V_FRONT_PORCH + V_SYNC_LINES; n++) {
+        line_ptrs[tail + n] = blank_line;
     }
 }
 

@@ -1,5 +1,6 @@
 ; 2-bit luminance on GPIO 0/1 (V0, V1). One instruction per dot at clkdiv 3.
-; Autopull 32, shift left (MSB first). Stalls on empty TX FIFO during blanking.
+; Autopull 32, shift left (MSB first). 32-bit DMA is little-endian: pack
+; with (x/4)^3 so pixel 0 is bits 31-30 of each word. Stalls on empty TX FIFO.
 
 .program video_pixel
 
