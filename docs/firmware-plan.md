@@ -1,16 +1,16 @@
 # Firmware plan
 
-RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). Sources: [`video/`](../video/) (PIO / DMA / packing), [`apps/patterns/main.c`](../apps/patterns/main.c) (generators). Boot image is 78 Hz crosshatch; USB CDC or BOOTSEL switches the other patterns. Other firmware apps (glass TTY, phosphor reel) live under [`apps/`](../apps/) and build separately. Terminal emulator: [terminal-plan.md](terminal-plan.md). Phosphor demos: [demo-plan.md](demo-plan.md).
+RP2040 implementation plan for the CRT drive replacement. Timings, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). **Build order:** 60 Hz 80-col plus in [`apps/cross60`](../apps/cross60/) first; 78 Hz pattern generators in [`apps/pattern/main.c`](../apps/pattern/main.c) after that raster is centered. Shared 78 Hz PIO/DMA is in [`video/`](../video/). Glass TTY and phosphor reel stay under [`apps/`](../apps/). Terminal emulator: [terminal-plan.md](terminal-plan.md). Phosphor demos: [demo-plan.md](demo-plan.md).
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pico carrier (74AHCT125), GPIO map, and the 78 Hz timing table are in the hardware doc. The Dev-Host container and USB Pico path are proven (`make smoke`, `make hello-test`; [toolchains.md](toolchains.md)). CRT firmware is in-tree (`make build` / `make flash`); `/HSYNC`, `/VSYNC`, and V0/V1 checked out on a scope. Do not drive a CRT until isolation.
+The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pico carrier (74AHCT125), GPIO map, and the 78 Hz timing table are in the hardware doc. The Dev-Host container and USB Pico path are proven (`make smoke`, `make test APP=hello`; [toolchains.md](toolchains.md)). CRT firmware is in-tree (`make build` / `make flash`); `/HSYNC`, `/VSYNC`, and V0/V1 checked out on a scope. Do not drive a CRT until isolation.
 
-**Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3, 144 MHz `sys_clk` / PIO clkdiv 3 → 48 MHz dots, 78.041 Hz first. Three PIO SMs. Pixel blanking is FIFO stall plus one trailing off word per stored line (16 pixels); DMA does not pad the full 1530-dot raster (1530 is not a multiple of 16 pixels).
+**Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3. First raster is **60 Hz 80-col** (Pico PLL 128.4 MHz / clkdiv 4 → 32.1 MHz dots, 1024-dot line). 78 Hz (144 MHz / 3 → 48 MHz, 1530-dot line) is later. Three PIO SMs. Pixel blanking is FIFO stall plus one trailing off word per stored line (16 pixels).
 
-**Still open:** measured confirmation of 78 Hz porch widths; 60 Hz timings.
+**Still open:** fold `cross60` 78 Hz porches (377 / 8 BP) into [`apps/pattern`](../apps/pattern/) (still 338 / 48 BP). 60 Hz H/V split on this MC5 is decided in the test-pattern HIL record.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ PIO hsync SM  --> GPIO 2   --> 74AHCT125 --> pad H
 PIO vsync SM  --> GPIO 3   --> 74AHCT125 --> pad V
 ```
 
-Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PIO instruction per dot). First video mode is 78 Hz; 60 Hz is phase 6.
+Target clock (60 Hz foundation): `sys_clk` = 128.4 MHz, PIO clkdiv = 4.00 → 32.1 MHz dots. 78 Hz pattern app still uses 144 MHz / 3 → 48 MHz.
 
 ## PIO mapping
 
@@ -38,12 +38,12 @@ Target clock: `sys_clk` = 144 MHz, PIO clkdiv = 3.00 → 48.000 MHz dots (one PI
 
 ### PIO wrap totals
 
-[`hsync.pio`](../video/hsync.pio) wrap is **1530** dots (960 high active+FP, 140 low sync, 430 high BP). [`vsync.pio`](../video/vsync.pio) wrap is **402** IRQ-paced lines (398 high + 4 low). The sketches below are historical; they do **not** add up and are not what is in the `.pio` files:
+[`hsync.pio`](../video/hsync.pio) wrap is **1530** dots (960 high active+FP, 140 low sync, 430 high BP). [`vsync.pio`](../video/vsync.pio) wrap is **402** IRQ-paced lines (396 high + 6 low). The sketches below are historical; they do **not** add up and are not what is in the `.pio` files:
 
 - **HSYNC draft:** `set pins,1 [9]` (10) + `set x,30` (1) + 31×32 (992) + `set x,11` (1) + 12×32 (384) = **1388** high, not 1390. Low side: `set pins,0 [7]` (8) + `set x,3` (1) + 4×32 (128) + `irq 0` (1) = **138** low, not 140. Line total **1526**, not 1530.
 - **VSYNC draft:** `set x,31` then `wait`/`jmp` is 32 lines; plus `set x,11` is 12 more → **44** high lines, not 398. The 4-line low loop is the only part that matches.
 
-Porch *split* (800/160/140/430 and 338/12/4/48) is still a **working hypothesis** until a WY-120 capture. Line and frame *rates* from 48 MHz / 1530 / 402 match Appendix B and checked out on a Pico GPIO scope.
+Porch *widths* for [`apps/pattern`](../apps/pattern/) (800/160/140/430 and 338/10/6/48) are still a **working hypothesis**. [`apps/cross60`](../apps/cross60/) 78 Hz DMA is **8 BP + 377 active + 11 FP + 6 sync** (HIL). An earlier table put all blanks after active (0-line back porch, raster in top overscan). Line and frame *rates* from 48 MHz / 1530 / 402 match Appendix B and checked out on a Pico GPIO scope.
 
 ## Framebuffer packing
 
@@ -56,7 +56,7 @@ Porch *split* (800/160/140/430 and 338/12/4/48) is still a **working hypothesis*
 | Packed width | 200 bytes/line |
 | Line stride | 204 bytes (51 DMA words) |
 | Buffer size | 338 × 204 = 68,952 bytes |
-| Shift | `out_shift_right = false`, autopull 32 bits |
+| Shift | `out_shift_right = false`, autopull 32 bits. 32-bit LE DMA outputs the high byte first, so `set_pixel` stores at `(x/4) ^ 3`. An 80 px grid hid this (all lines at x%16==0); a 40 px grid showed 24/56 px pairs. |
 
 | Bits | V0 | V1 | State |
 | --- | --- | --- | --- |
@@ -65,7 +65,7 @@ Porch *split* (800/160/140/430 and 338/12/4/48) is still a **working hypothesis*
 | `10` | 0 | 1 | Normal |
 | `11` | 1 | 1 | Bold |
 
-**Decided:** wrap-forever `out pins, 2` stalls on empty TX FIFO during H/V blank. DMA sends 51 words per line (800 active pixels + 16 off). 64 V-blank lines are extra DMA rows of zeros, not a second framebuffer. HSYNC `push`es a dummy RX word at the start of active to pace the next line.
+**Decided:** wrap-forever `out pins, 2` stalls on empty TX FIFO during H/V blank. DMA sends 51 words per line (800 active pixels + 16 off). 64 V-blank lines are extra DMA rows of zeros, not a second framebuffer. After `/VSYNC` rewind the table is **48 back porch + 338 active + 10 front porch + 6 sync** so the vsync SM’s 396-high / 6-low wrap stays lockstep with DMA. (An earlier table put all 64 blanks after active: 0-line back porch, raster in top overscan.) HSYNC `push`es a dummy RX word at the start of active to pace the next line.
 
 ## Phases
 
@@ -166,7 +166,7 @@ typedef enum {
 void set_pixel(uint16_t x, uint16_t y, PixelColor color) {
     if (x >= FRAME_WIDTH || y >= FRAME_HEIGHT) return;
 
-    uint16_t byte_idx = x / 4;
+    uint16_t byte_idx = (x / 4) ^ 3; /* LE 32-bit word, PIO MSB first */
     uint8_t shift = (3 - (x % 4)) * 2;
 
     frame_buffer[y][byte_idx] &= ~(0b11 << shift);
@@ -212,7 +212,7 @@ void init_crt_pio(PIO pio, uint pin_v0, uint pin_hsync, uint pin_vsync) {
 ### 4. DMA loop
 
 - [x] Data channel: 32-bit incrementing read from `frame_buffer`, write to `pio->txf[sm]`, DREQ = PIO TX
-- [x] Per-line kick: hsync RX `push` drains into a dummy, then a control channel writes `al3_read_addr_trig` from a 402-entry line-pointer table (338 active + 64 blank)
+- [x] Per-line kick: hsync RX `push` drains into a dummy, then a control channel writes `al3_read_addr_trig` from a 402-entry line-pointer table (48 BP + 338 active + 10 FP + 6 sync)
 - [x] Start after clock + PIO init
 - [x] TX FIFO stays non-empty during active; no underflow gaps on V0/V1 — scope
 - [x] Stream repeats every 12.813 ms — scope
@@ -268,25 +268,27 @@ Implemented DMA is per-line (51 words), not this whole-frame `TOTAL_FRAME_WORDS`
 
 ### 5. Test patterns
 
-Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. USB CDC (`1`/`c`, `2`/`i`, `3`/`f`, `4`/`n`, `5`/`o`) selects a pattern; a short BOOTSEL press cycles the same order. Both rewrite `frame_buffer` while DMA runs. Factory-key emulation is still optional later UI.
+Geometry is specified in [test-pattern-design.md](test-pattern-design.md). v1 is pattern generators on the Pico, not factory keyboard chords. USB CDC (`1`/`c`, `2`/`i`, `3`/`f`, `4`/`n`, `5`/`o`, `6`/`s`) selects a pattern; a short BOOTSEL press cycles the same order. Both rewrite `frame_buffer` while DMA runs. Factory-key emulation is still optional later UI.
 
-- [x] Crosshatch generator in [`apps/patterns/main.c`](../apps/patterns/main.c) (grid, bold box, bold reticle)
+- [x] Crosshatch generator in [`apps/pattern/main.c`](../apps/pattern/main.c) (grid, bold box, bold reticle)
 - [x] Intensity bars / focus matrix / full-on
 - [x] RCA Indian Head (letterboxed 4:3 + V0/V1 side columns)
-- [x] USB CDC pattern select (`make serial`)
+- [x] Sync-squares (raster-edge box + 100 mm scale square + 80 × 80 + center cross)
+- [x] USB CDC pattern select (`make monitor`)
 - [x] BOOTSEL cycles patterns (flash-CS sample from RAM)
 - [x] Scope: V0/V1 pattern vs /HSYNC (vertical bars every 1.667 us)
 - [ ] CRT after isolation and 5 V level shift
 
 | Pattern | Drawing | Analog use |
 | --- | --- | --- |
+| Sync-squares | Raster-edge box; 100 mm scale square; 80 × 80; center cross | H/V phase, size, mm/px |
 | Crosshatch | Bold overscan box; vertical every 80 px; horizontal every 13 lines; bold center reticle | Size, centering, linearity, pincushion |
 | Intensity bars | Four horizontal bands: off, dim, normal, bold | Brightness / contrast, no bloom |
 | Focus matrix | Dense `H` in 10 × 13 cells (132 later if needed) | Center/corner focus |
 | Indian Head | Letterboxed RCA card; V0 / V1 / bold patches; resolution bursts | Geometry, grayscale, bandwidth |
 | Full-on box | All pixels bold | Max beam current, 78 Hz overscan |
 
-Sketch for crosshatch (helpers from phase 3). Draw order: grid, then bold box and reticle. Pattern generators are in [`apps/patterns/main.c`](../apps/patterns/main.c); intensity bars pack each line (84 / 84 / 85 / 85) and leave the trailing off word blank. Indian Head is a packed 2 bpp blit.
+Sketch for crosshatch (helpers from phase 3). Draw order: grid, then bold box and reticle. Pattern generators are in [`apps/pattern/main.c`](../apps/pattern/main.c); intensity bars pack each line (84 / 84 / 85 / 85) and leave the trailing off word blank. Indian Head is a packed 2 bpp blit.
 
 ```c
 void generate_crosshatch_pattern(void) {
@@ -353,16 +355,19 @@ On the CRT (after isolation and 5 V level shift):
 
 ### 6. Optional 60 Hz
 
+- [x] Standalone plus/measure [`apps/cross60`](../apps/cross60/) (`make test` / `make monitor`): 32.1 MHz, 1024-dot line, V 50/6/51; CDC `4` meas, `m` 80/132, `r` 60/78, `a`/`d` H, `w`/`s` V
+- [x] 60 Hz 132-col: 1530-dot `/HSYNC` at ~48 MHz (clkdiv 2.675, PLL stays 128.4 MHz), 1188×416, same 523-line V
+- [x] 78 Hz 80/132-col: 402-line `/VSYNC`, **377** active (13×29) / 8 BP (centered; ~1 cm cells)
 - [ ] Measure 60 Hz porches (do not invent). Appendix B: 416 active lines, 59.999 Hz, same ~31.37 kHz H
-- [ ] Second timing table and PIO counts
-- [ ] Keep 78.041 Hz as the default
+- [ ] Second timing table in shared `video/` (cross60 porches 50/6/51)
+- [x] Keep 60 Hz 80-col plus as the default app (`make test`)
 
 ## Scope / visual checklist
 
 | Check | Expected |
 | --- | --- |
 | /HSYNC | 31.373 kHz, active-low, ~2.917 us pulse |
-| /VSYNC | 78.041 Hz, active-low, 4 lines |
+| /VSYNC | 78.041 Hz, active-low, 6 lines |
 | V0 / V1 | 2-bit stream, no FIFO holes, repeats every 12.813 ms |
 | Active line vs /HSYNC | Video ends before the sync pulse |
 | IC401 inputs | 0 V / +5 V matching the luminance table |
@@ -372,6 +377,6 @@ On the CRT (after isolation and 5 V level shift):
 
 1. ~~Three PIO SMs vs combined timing SM~~ — three SMs.
 2. ~~Pixel SM blanking: stall vs padded full-raster DMA~~ — FIFO stall + trailing off word.
-3. Confirm 78 Hz porch *widths* on a WY-120 before freezing delays (wrap *totals* 1530/402 and line/frame rates checked out on a Pico GPIO scope).
-4. 60 Hz porches TBD (Appendix B has active size and rates only).
+3. [`apps/cross60`](../apps/cross60/) 78 Hz porch widths are HIL-settled (377 / 11 / 6 / 8). [`apps/pattern`](../apps/pattern/) still uses 338 / 10 / 6 / 48.
+4. 60 Hz: Pico PLL 128.4 MHz / 4 = 32.1 MHz dots, **1024**/line (800/113/111/0), 523 lines, V **50/6/51**. Box **22.5 × 17.0 cm**; VR302 min ≈ 11 mm V; H ~1 cm after 111-dot `/HSYNC`. 78 Hz on the same analog: 377 lines, ~1.65 cm V, ~1 cm cells. Polarity is factory active-low.
 5. Factory-key pattern switching is optional UI; USB CDC and BOOTSEL are the analog-setup switch.

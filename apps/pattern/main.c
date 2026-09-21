@@ -9,21 +9,26 @@
 #include "video.h"
 #include "assets/indian_head/indian_head_pattern.h"
 
-#define PATTERN_COUNT       5
+#define PATTERN_COUNT       6
 #define BOOTSEL_POLL_US     10000
 #define BOOTSEL_DEBOUNCE_MS 50
 #define BANNER_MS           250
+#define SYNC_SQUARE_SIZE    80   /* equal pixel sides; mm/px */
+#define SYNC_MM_SQUARE_W    320  /* 100 mm on 250 mm bezel: 100/250 * 800 */
+#define SYNC_MM_SQUARE_H    178  /* 100 mm on 190 mm bezel: 100/190 * 338 */
+#define SYNC_CROSS_ARM      12
 
 typedef enum {
     PATTERN_CROSSHATCH = 0,
     PATTERN_INTENSITY,
     PATTERN_FOCUS,
     PATTERN_INDIAN_HEAD,
-    PATTERN_FULL_ON
+    PATTERN_FULL_ON,
+    PATTERN_SYNC_SQUARES
 } PatternId;
 
-static const char *pattern_name = "crosshatch";
-static PatternId current_pattern = PATTERN_CROSSHATCH;
+static const char *pattern_name = "sync-squares";
+static PatternId current_pattern = PATTERN_SYNC_SQUARES;
 
 /* 7x10 H; bit 6 is the left column of the inner cell. */
 static const uint8_t glyph_h[GLYPH_HEIGHT] = {
@@ -124,6 +129,51 @@ void generate_full_on_box(void) {
     clear_buffer(PIXEL_BOLD);
 }
 
+static void draw_rect_outline(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+                              PixelColor color) {
+    for (uint16_t x = x0; x <= x1; x++) {
+        set_pixel(x, y0, color);
+        set_pixel(x, y1, color);
+    }
+    for (uint16_t y = y0; y <= y1; y++) {
+        set_pixel(x0, y, color);
+        set_pixel(x1, y, color);
+    }
+}
+
+static void draw_centered_rect(uint16_t cx, uint16_t cy, uint16_t w, uint16_t h,
+                               PixelColor color) {
+    uint16_t x0 = (uint16_t)(cx - w / 2);
+    uint16_t y0 = (uint16_t)(cy - h / 2);
+    uint16_t x1 = (uint16_t)(cx + w / 2 - 1);
+    uint16_t y1 = (uint16_t)(cy + h / 2 - 1);
+    draw_rect_outline(x0, y0, x1, y1, color);
+}
+
+static void draw_cross(uint16_t cx, uint16_t cy, uint16_t arm, PixelColor color) {
+    for (uint16_t x = (uint16_t)(cx - arm); x <= (uint16_t)(cx + arm); x++) {
+        set_pixel(x, (uint16_t)(cy - 1), color);
+        set_pixel(x, cy, color);
+        set_pixel(x, (uint16_t)(cy + 1), color);
+    }
+    for (uint16_t y = (uint16_t)(cy - arm); y <= (uint16_t)(cy + arm); y++) {
+        set_pixel((uint16_t)(cx - 1), y, color);
+        set_pixel(cx, y, color);
+        set_pixel((uint16_t)(cx + 1), y, color);
+    }
+}
+
+void generate_sync_squares_pattern(void) {
+    const uint16_t cx = FRAME_WIDTH / 2;   /* 400 */
+    const uint16_t cy = FRAME_HEIGHT / 2;  /* 169 */
+
+    clear_buffer(PIXEL_OFF);
+    draw_rect_outline(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1, PIXEL_BOLD);
+    draw_centered_rect(cx, cy, SYNC_MM_SQUARE_W, SYNC_MM_SQUARE_H, PIXEL_BOLD);
+    draw_centered_rect(cx, cy, SYNC_SQUARE_SIZE, SYNC_SQUARE_SIZE, PIXEL_NORMAL);
+    draw_cross(cx, cy, SYNC_CROSS_ARM, PIXEL_BOLD);
+}
+
 void generate_indian_head_pattern(void) {
     for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
         memcpy(frame_buffer[y], indian_head_packed[y], BYTES_PER_LINE);
@@ -175,13 +225,17 @@ static void apply_pattern(PatternId id) {
         generate_full_on_box();
         pattern_name = "full-on";
         break;
+    case PATTERN_SYNC_SQUARES:
+        generate_sync_squares_pattern();
+        pattern_name = "sync-squares";
+        break;
     case PATTERN_CROSSHATCH:
     default:
         generate_crosshatch_pattern();
         pattern_name = "crosshatch";
         break;
     }
-    printf("crt-drive pattern=%s 78Hz\n", pattern_name);
+    printf("crt-pattern pattern=%s 78Hz\n", pattern_name);
     if (id == PATTERN_FULL_ON) {
         printf("full-on is a beam-current stress pattern; switch off when done\n");
     }
@@ -211,7 +265,7 @@ static void poll_bootsel(void) {
 }
 
 static void print_pattern_help(void) {
-    printf("crt-drive patterns 78Hz: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus  4/n indian-head  5/o full-on\n");
+    printf("crt-pattern 78Hz: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus  4/n indian-head  5/o full-on  6/s sync-squares\n");
 }
 
 int main(void) {
@@ -223,7 +277,7 @@ int main(void) {
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 #endif
 
-    apply_pattern(PATTERN_CROSSHATCH);
+    apply_pattern(PATTERN_SYNC_SQUARES);
     video_start(pio0);
     print_pattern_help();
 
@@ -259,6 +313,11 @@ int main(void) {
             case 'O':
                 apply_pattern(PATTERN_FULL_ON);
                 break;
+            case '6':
+            case 's':
+            case 'S':
+                apply_pattern(PATTERN_SYNC_SQUARES);
+                break;
             case '?':
                 print_pattern_help();
                 break;
@@ -272,7 +331,7 @@ int main(void) {
 #ifdef PICO_DEFAULT_LED_PIN
             gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
 #endif
-            printf("crt-drive pattern=%s 78Hz\n", pattern_name);
+            printf("crt-pattern pattern=%s 78Hz\n", pattern_name);
         }
     }
 }

@@ -1,7 +1,9 @@
-; /VSYNC on SET pin (GPIO 3). Idle high, 4-line active-low pulse.
+; /VSYNC on SET pin (GPIO 3). Idle high, 6-line active-low pulse.
 ; Paced by IRQ 0 from hsync. One wrap = 402 lines (12.813 ms, 78.041 Hz).
 ;
-; Frame: 338 active + 12 front porch + 4 sync + 48 back porch = 402.
+; Wrap is 396 high + 6 low. DMA split is per app:
+;   cross60 (HIL): 8 BP + 377 active + 11 FP + 6 sync
+;   pattern app:   48 BP + 338 active + 10 FP + 6 sync
 ; IRQ 2 at wrap: rewind the DMA line-pointer table (once per frame).
 
 .program vsync
@@ -15,13 +17,13 @@ high_inner:
     wait 1 irq 0
     jmp y-- high_inner
     jmp x-- high_outer
-    set x, 13                       ; 14 more waits → 398 high lines
+    set x, 11                       ; 12 more waits → 396 high lines
 high_remain:
     wait 1 irq 0
     jmp x-- high_remain
 
     set pins, 0
-    set x, 3                        ; 4 low lines
+    set x, 5                        ; 6 low lines
 low_lines:
     wait 1 irq 0
     jmp x-- low_lines

@@ -1,28 +1,28 @@
 # crt-drive — Dev-Host Pico SDK container (no hardware gateway).
 # Docker targets live in docker/Makefile; this file is a thin wrapper.
 
-.PHONY: help image smoke build rebuild shell shell-usb flash serial serial-check picotool-info \
-	pico-discover hello-build hello-flash hello-serial hello-test \
-	term-build term-flash term-serial term-test \
-	demos-build demos-flash demos-serial demos-test
+.PHONY: help image smoke build rebuild shell shell-usb flash monitor test picotool-info \
+	pico-discover \
+	pattern-build pattern-flash pattern-monitor pattern-test \
+	term-build term-flash term-monitor term-test \
+	demos-build demos-flash demos-monitor demos-test \
+	cross60-build cross60-flash cross60-monitor cross60-test \
+	hello-build hello-flash hello-monitor hello-test \
+	serial serial-check term-serial demos-serial hello-serial
 
-APP ?= patterns
+APP ?= cross60
+
+SERIAL_GONE = use 'make monitor' (CDC) or 'make test' (HIL); serial targets are retired
 
 help:
 	@echo "crt-drive RP2040 toolchain (Docker on this Dev-Host)"
-	@echo "  make image         — build pico-dev image"
-	@echo "  make smoke         — check ARM GCC, CMake, Ninja, Pico SDK, picotool USB"
-	@echo "  make pico-discover — USB Pico on this host (lsusb, by-id, picotool)"
-	@echo "  make hello-test    — build/flash/ping hello_pico (unique digest)"
-	@echo "  make hello-build / hello-flash / hello-serial"
-	@echo "  make build         — analog-setup patterns (apps/patterns, crt_drive)"
-	@echo "  make flash / serial / serial-check"
-	@echo "  make APP=term build / flash — glass TTY (apps/term, crt_term)"
-	@echo "  make term-build / term-flash / term-serial / term-test"
-	@echo "  make APP=demos build / flash — phosphor reel (apps/demos, crt_demos)"
-	@echo "  make demos-build / demos-flash / demos-serial / demos-test"
-	@echo "  make shell / shell-usb / picotool-info"
-	@echo "See docs/toolchains.md (Docker image and how to use it)"
+	@echo "  Verbs (default APP=cross60 → apps/cross60, crt_cross60):"
+	@echo "    make build / rebuild / flash / test"
+	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, hello"
+	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos   make test APP=hello"
+	@echo "  Aliases: pattern-*  term-*  demos-*  cross60-*  hello-*   (build, flash, monitor, test)"
+	@echo "  make image / smoke / pico-discover / shell / shell-usb / picotool-info"
+	@echo "See docs/toolchains.md"
 
 image:
 	$(MAKE) -C docker build-images
@@ -31,7 +31,7 @@ smoke:
 	$(MAKE) -C docker smoke
 
 build:
-	$(MAKE) -C docker build APP=$(APP)
+	$(MAKE) -C docker build APP=$(APP) IMAGE_ID="$(IMAGE_ID)"
 
 rebuild:
 	$(MAKE) -C docker rebuild APP=$(APP)
@@ -45,62 +45,94 @@ shell-usb:
 flash:
 	$(MAKE) -C docker flash APP=$(APP)
 
+# Bare monitor does not pass APP, so the host script reads the running firmware banner.
+# Command-line APP=term (etc.) forces that dialect.
+ifeq ($(origin APP),command line)
+MONITOR_APP := $(APP)
+else
+MONITOR_APP :=
+endif
+
+monitor:
+	$(MAKE) -C docker monitor APP="$(MONITOR_APP)" IMAGE_ID="$(IMAGE_ID)"
+
 picotool-info:
 	$(MAKE) -C docker picotool-info
-
-serial:
-	$(MAKE) -C docker serial
-
-serial-check:
-	$(MAKE) -C docker serial-check
 
 pico-discover:
 	$(MAKE) -C docker pico-discover
 
-hello-build:
-	$(MAKE) -C docker hello-build
+IMAGE_ID ?=
+TEST_ID ?= $(shell date +%s)-$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
 
-hello-flash:
-	$(MAKE) -C docker hello-flash
+test:
+	$(MAKE) pico-discover
+	@if ! lsusb -d 2e8a:000a >/dev/null 2>&1 && ! lsusb -d 2e8a:0003 >/dev/null 2>&1; then \
+		echo "HIL skip: no Pico on USB (2e8a:000a / 2e8a:0003)"; \
+	else \
+		$(MAKE) -C docker test APP=$(APP) IMAGE_ID="$(TEST_ID)"; \
+	fi
 
-hello-serial:
-	$(MAKE) -C docker hello-serial
+pattern-build:
+	$(MAKE) build APP=pattern
 
-hello-test:
-	$(MAKE) -C docker hello-test
+pattern-flash:
+	$(MAKE) flash APP=pattern
+
+pattern-monitor:
+	$(MAKE) monitor APP=pattern
+
+pattern-test:
+	$(MAKE) test APP=pattern
 
 term-build:
-	$(MAKE) -C docker term-build
+	$(MAKE) build APP=term
 
 term-flash:
-	$(MAKE) -C docker term-flash
+	$(MAKE) flash APP=term
 
-term-serial:
-	$(MAKE) -C docker term-serial
+term-monitor:
+	$(MAKE) monitor APP=term
 
-TERM_TEST_ID ?= $(shell date +%s)-$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
 term-test:
-	$(MAKE) pico-discover
-	@if ! lsusb -d 2e8a:000a >/dev/null 2>&1 && ! lsusb -d 2e8a:0003 >/dev/null 2>&1; then \
-		echo "HIL skip: no Pico on USB (2e8a:000a / 2e8a:0003)"; \
-	else \
-		$(MAKE) -C docker term-test TERM_TEST_ID="$(TERM_TEST_ID)"; \
-	fi
+	$(MAKE) test APP=term
 
 demos-build:
-	$(MAKE) -C docker demos-build
+	$(MAKE) build APP=demos
 
 demos-flash:
-	$(MAKE) -C docker demos-flash
+	$(MAKE) flash APP=demos
 
-demos-serial:
-	$(MAKE) -C docker demos-serial
+demos-monitor:
+	$(MAKE) monitor APP=demos
 
-DEMO_TEST_ID ?= $(shell date +%s)-$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
 demos-test:
-	$(MAKE) pico-discover
-	@if ! lsusb -d 2e8a:000a >/dev/null 2>&1 && ! lsusb -d 2e8a:0003 >/dev/null 2>&1; then \
-		echo "HIL skip: no Pico on USB (2e8a:000a / 2e8a:0003)"; \
-	else \
-		$(MAKE) -C docker demos-test DEMO_TEST_ID="$(DEMO_TEST_ID)"; \
-	fi
+	$(MAKE) test APP=demos
+
+cross60-build:
+	$(MAKE) build APP=cross60
+
+cross60-flash:
+	$(MAKE) flash APP=cross60
+
+cross60-monitor:
+	$(MAKE) monitor APP=cross60
+
+cross60-test:
+	$(MAKE) test APP=cross60
+
+hello-build:
+	$(MAKE) build APP=hello IMAGE_ID="$(IMAGE_ID)"
+
+hello-flash:
+	$(MAKE) flash APP=hello
+
+hello-monitor:
+	$(MAKE) monitor APP=hello
+
+hello-test:
+	$(MAKE) test APP=hello
+
+serial serial-check term-serial demos-serial hello-serial:
+	@echo "$(SERIAL_GONE)" >&2
+	@exit 2

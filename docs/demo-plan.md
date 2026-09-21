@@ -24,18 +24,19 @@ scene tick (starfield, radar, lissajous, xor, wireframe)
         v
 frame_buffer (800x338 @ 2 bpp)
         |
-        | DMA (shared with crt_drive / crt_term)
+        | DMA (shared with crt_pattern / crt_term)
         v
 PIO pixel / hsync / vsync  --> GPIO 0-3
 ```
 
 | Make | App | Role | CDC |
 | --- | --- | --- | --- |
-| `make build` / `make flash` | [`apps/patterns`](../apps/patterns/) (`crt_drive`) | Test patterns (default) | `1`–`5` / BOOTSEL; `pattern=` banner |
-| `make APP=term build` | [`apps/term`](../apps/term/) (`crt_term`) | Glass TTY | host bytes; `crt-term digest=` |
-| `make APP=demos build` | [`apps/demos`](../apps/demos/) (`crt_demos`) | Phosphor reel | scene keys; `crt-demos digest=` |
+| `make build` / `make flash` | [`apps/pattern`](../apps/pattern/) (`crt_pattern`) | Analog-setup drawings (default) | `1`–`6` / BOOTSEL; `crt-pattern` banner |
+| `make build APP=term` | [`apps/term`](../apps/term/) (`crt_term`) | Glass TTY | host bytes; `crt-term digest=` |
+| `make build APP=demos` | [`apps/demos`](../apps/demos/) (`crt_demos`) | Phosphor reel | scene keys; `crt-demos digest=` |
+| `make monitor` | running UF2 | CDC attach | banner detect |
 
-`make demos-build` / `demos-flash` / `demos-serial` / `demos-test` are aliases.
+`make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` are aliases.
 
 ## Scenes
 
@@ -71,12 +72,12 @@ Until the first host byte, and on `?`, print:
 crt-demos digest=<id> 78Hz scene=<name>
 ```
 
-After the host has spoken, keep the same line on a 250 ms cadence so HIL can see a scene change. `digest=` is `DEMO_IMAGE_ID` (git short hash, or the unique id `make demos-test` injects).
+After the host has spoken, keep the same line on a 250 ms cadence so HIL can see a scene change. `digest=` is `IMAGE_ID` (git short hash, or the unique id `make test APP=demos` injects).
 
 ## Verification
 
-- `make build` still produces `crt_drive` with `crt-drive pattern=` on CDC.
-- `make demos-test`: Pico on USB → unique `digest=` then CDC `2` → `scene=radar`; no board (`make pico-discover` empty) → explicit HIL skip, not a pass.
+- `make build` still produces `crt_pattern` with `crt-pattern pattern=` on CDC.
+- `make test APP=demos`: Pico on USB → unique `digest=` then CDC `2` → `scene=radar`; no board (`make pico-discover` empty) → explicit HIL skip, not a pass.
 - CRT after isolation and 5 V level shift: trails and bloom on the same 78 Hz timing already checked out on a scope. Tune fade dwell on the tube.
 
 ## Later (not this UF2)

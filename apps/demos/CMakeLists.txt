@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13)
 
 # Phosphor physics attract reel. Configure this directory only:
 #   cmake -S apps/demos -B build/demos
-# Or from the repo root: make APP=demos build
+# Or from the repo root: make build APP=demos
 
 set(PICO_BOARD pico CACHE STRING "RP2040 board type")
 get_filename_component(CRT_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)

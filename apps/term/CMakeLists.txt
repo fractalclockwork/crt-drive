@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13)
 
 # Glass TTY. Configure this directory only:
 #   cmake -S apps/term -B build/term
-# Or from the repo root: make APP=term build
+# Or from the repo root: make build APP=term
 
 set(PICO_BOARD pico CACHE STRING "RP2040 board type")
 get_filename_component(CRT_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
@@ -31,7 +31,7 @@ endif()
 if(NOT TERM_IMAGE_ID)
   set(TERM_IMAGE_ID "unknown")
 endif()
-string(REGEX REPLACE "[^A-Za-z0-9._-]" "" TERM_IMAGE_ID "${TERM_IMAGE_ID}")
+string(REGEX REPLACE "[^-A-Za-z0-9._]" "" TERM_IMAGE_ID "${TERM_IMAGE_ID}")
 if(TERM_IMAGE_ID STREQUAL "")
   set(TERM_IMAGE_ID "unknown")
 endif()

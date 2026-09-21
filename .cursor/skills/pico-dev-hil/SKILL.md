@@ -17,9 +17,9 @@ From the repository root: `make help`. Never `apt install gcc-arm-none-eabi`, ne
 
 1. `make pico-discover` — `2e8a:000a` CDC (app running), `2e8a:0003` BOOTSEL (load), none = skip HIL and say so.
 2. Edit sources in this git tree (bind-mounted at `/workspace` in the container).
-3. Compile: `make hello-build` (bring-up), `make build` (patterns, default), `make APP=term build` (glass TTY), or `make APP=demos build` (phosphor reel).
-4. Gate: `make hello-test` (unique `digest=` banner + `pong`). Pattern firmware: `make flash` then `make serial-check`. Glass TTY: `make term-test`. Phosphor reel: `make demos-test`.
-5. Evidence is CDC `digest=`, not ninja exit 0 alone.
+3. Compile: `make build` (60 Hz plus, default), `make build APP=pattern`, `make build APP=term`, `make build APP=demos`, or `make build APP=hello` (bring-up).
+4. Gate: `make test APP=hello` (unique `digest=` + `pong`). 60/78 Hz measure: `make test` (`crt-cross60` banner) then `make monitor` (keys `1`–`4`, `m` 80/132, `r` 60/78, `a`/`d`, `w`/`s`). 78 Hz drawings: `make test APP=pattern`. Glass TTY: `make test APP=term`. Phosphor reel: `make test APP=demos`. CDC attach for any running image: `make monitor`.
+5. Evidence is CDC banner (`digest=` where the app prints one), not ninja exit 0 alone. No board is an explicit HIL skip, not a pass.
 
 ## USB and Docker
 
@@ -29,7 +29,7 @@ Make uses [`docker/with-docker.sh`](../../../docker/with-docker.sh) for the dock
 
 ## Safety
 
-`hello-test` is the USB Pico on the Dev-Host, not permission to drive a live CRT. Isolation notes stay in the README.
+`make test APP=hello` is the USB Pico on the Dev-Host, not permission to drive a live CRT. Isolation notes stay in the README.
 
 ## More detail
 
