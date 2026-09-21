@@ -1,0 +1,33 @@
+; /HSYNC on SET pin (GPIO 2). Idle high, 166-dot active-low pulse.
+; Same 128.4 MHz PLL as 80-col; clkdiv 2.675 → ~47.988 MHz dots.
+; One wrap = 1530 dots (31.883 us, 31.365 kHz). 523 lines → 59.971 Hz.
+;
+; 132-col: 1188 active + 176 front porch + 166 sync + 0 back porch.
+; Porches are the 80-col 113/111/0 split scaled 48/32.1 onto a 1530-dot
+; line (Appendix B 1188 @ 31.372 kHz). Sync stays ~3.46 us.
+; Pin is low at wrap; AFP raises it. IRQ 0 at end of sync.
+
+.program hsync60_132
+
+.wrap_target
+    ; --- active + front porch: 1364 dots ---
+    set pins, 1                     ; 1
+    mov isr, null                   ; 1
+    push noblock                    ; 1
+    set x, 16                       ; 1
+afp_outer:                          ; 17 * 80 = 1360
+    set y, 25                       ;   1
+afp_inner:
+    jmp y-- afp_inner [2]           ;   78
+    jmp x-- afp_outer               ;   1
+    ; 1+1+1+1+1360 = 1364
+
+    ; --- sync pulse: 166 dots, pin low ---
+    set pins, 0                     ; 1
+    set x, 4                        ; 1
+sync_loop:
+    jmp x-- sync_loop [31]          ; 160
+    nop [2]                         ; 3
+    irq 0                           ; 1
+    ; 1+1+160+3+1 = 166
+.wrap

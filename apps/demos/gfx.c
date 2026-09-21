@@ -31,9 +31,11 @@ void gfx_init(void) {
 }
 
 void gfx_fade_active(void) {
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        uint8_t *line = frame_buffer[y];
-        for (uint16_t i = 0; i < BYTES_PER_LINE; i++) {
+    uint16_t height = scanout_height();
+    uint16_t store = scanout_store_bytes();
+    for (uint16_t y = 0; y < height; y++) {
+        uint8_t *line = scanout_row(y);
+        for (uint16_t i = 0; i < store; i++) {
             line[i] = fade_lut[line[i]];
         }
     }
@@ -55,7 +57,7 @@ void gfx_line(int x0, int y0, int x1, int y1, PixelColor color) {
 
     for (;;) {
         if (x0 >= 0 && y0 >= 0) {
-            set_pixel((uint16_t)x0, (uint16_t)y0, color);
+            scanout_set_pixel((uint16_t)x0, (uint16_t)y0, color);
         }
         if (x0 == x1 && y0 == y1) {
             break;
@@ -81,14 +83,14 @@ void gfx_circle(int cx, int cy, int radius, PixelColor color) {
     int err = 1 - radius;
 
     while (x >= y) {
-        set_pixel((uint16_t)(cx + x), (uint16_t)(cy + y), color);
-        set_pixel((uint16_t)(cx + y), (uint16_t)(cy + x), color);
-        set_pixel((uint16_t)(cx - y), (uint16_t)(cy + x), color);
-        set_pixel((uint16_t)(cx - x), (uint16_t)(cy + y), color);
-        set_pixel((uint16_t)(cx - x), (uint16_t)(cy - y), color);
-        set_pixel((uint16_t)(cx - y), (uint16_t)(cy - x), color);
-        set_pixel((uint16_t)(cx + y), (uint16_t)(cy - x), color);
-        set_pixel((uint16_t)(cx + x), (uint16_t)(cy - y), color);
+        scanout_set_pixel((uint16_t)(cx + x), (uint16_t)(cy + y), color);
+        scanout_set_pixel((uint16_t)(cx + y), (uint16_t)(cy + x), color);
+        scanout_set_pixel((uint16_t)(cx - y), (uint16_t)(cy + x), color);
+        scanout_set_pixel((uint16_t)(cx - x), (uint16_t)(cy + y), color);
+        scanout_set_pixel((uint16_t)(cx - x), (uint16_t)(cy - y), color);
+        scanout_set_pixel((uint16_t)(cx - y), (uint16_t)(cy - x), color);
+        scanout_set_pixel((uint16_t)(cx + y), (uint16_t)(cy - x), color);
+        scanout_set_pixel((uint16_t)(cx + x), (uint16_t)(cy - y), color);
         y++;
         if (err < 0) {
             err += 2 * y + 1;
@@ -97,4 +99,42 @@ void gfx_circle(int cx, int cy, int radius, PixelColor color) {
             err += 2 * (y - x) + 1;
         }
     }
+}
+
+void gfx_ellipse(int cx, int cy, int rx, int ry, PixelColor color) {
+    if (rx < 0) {
+        rx = -rx;
+    }
+    if (ry < 0) {
+        ry = -ry;
+    }
+    if (rx == 0) {
+        gfx_line(cx, cy - ry, cx, cy + ry, color);
+        return;
+    }
+    if (ry == 0) {
+        gfx_line(cx - rx, cy, cx + rx, cy, color);
+        return;
+    }
+
+    int x = -rx;
+    int y = 0;
+    int64_t a2 = (int64_t)rx * rx;
+    int64_t b2 = (int64_t)ry * ry;
+    int64_t err = (int64_t)x * (2 * b2 + x) + b2;
+    do {
+        scanout_set_pixel((uint16_t)(cx - x), (uint16_t)(cy + y), color);
+        scanout_set_pixel((uint16_t)(cx + x), (uint16_t)(cy + y), color);
+        scanout_set_pixel((uint16_t)(cx + x), (uint16_t)(cy - y), color);
+        scanout_set_pixel((uint16_t)(cx - x), (uint16_t)(cy - y), color);
+        int64_t e2 = err * 2;
+        if (e2 >= (2 * (int64_t)x + 1) * b2) {
+            x++;
+            err += (2 * (int64_t)x + 1) * b2;
+        }
+        if (e2 <= (2 * (int64_t)y + 1) * a2) {
+            y++;
+            err += (2 * (int64_t)y + 1) * a2;
+        }
+    } while (x <= 0);
 }

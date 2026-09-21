@@ -1,0 +1,33 @@
+; /HSYNC on SET pin (GPIO 2). Idle high, 111-dot active-low pulse.
+; Shared copy for video/scanout.c (pattern) and apps/cross60.
+; Pico PLL_SYS 128.4 MHz / clkdiv 4 → 32.1 MHz dots.
+; One wrap = 1024 dots (31.963 us, 31.348 kHz). 523 lines → 59.938 Hz.
+;
+; 80-col: 800 active + 113 front porch + 111 sync + 0 back porch.
+; HIL box vs 24.6 cm bezel: 1.4 cm left / 1.1 cm right. 5-dot earlier
+; (from 116-dot sync) to even the margins toward 11 mm ±2 mm.
+; Pin is low at wrap; AFP raises it. IRQ 0 at end of sync.
+
+.program hsync60
+
+.wrap_target
+    ; --- active + front porch: 913 dots ---
+    set pins, 1                     ; 1
+    mov isr, null                   ; 1
+    push noblock                    ; 1
+    set x, 10 [7]                   ; 8
+afp_outer:                          ; 11 * 82 = 902
+    set y, 15                       ;   1
+afp_inner:
+    jmp y-- afp_inner [4]           ;   80
+    jmp x-- afp_outer               ;   1
+    ; 1+1+1+8+902 = 913
+
+    ; --- sync pulse: 111 dots, pin low ---
+    set pins, 0                     ; 1
+    set x, 3                        ; 1
+sync_loop:
+    jmp x-- sync_loop [26]          ; 108
+    irq 0                           ; 1
+    ; 1+1+108+1 = 111
+.wrap

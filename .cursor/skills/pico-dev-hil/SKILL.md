@@ -18,7 +18,7 @@ From the repository root: `make help`. Never `apt install gcc-arm-none-eabi`, ne
 1. `make pico-discover` — `2e8a:000a` CDC (app running), `2e8a:0003` BOOTSEL (load), none = skip HIL and say so.
 2. Edit sources in this git tree (bind-mounted at `/workspace` in the container).
 3. Compile: `make build` (60 Hz plus, default), `make build APP=pattern`, `make build APP=term`, `make build APP=demos`, or `make build APP=hello` (bring-up).
-4. Gate: `make test APP=hello` (unique `digest=` + `pong`). 60/78 Hz measure: `make test` (`crt-cross60` banner) then `make monitor` (keys `1`–`4`, `m` 80/132, `r` 60/78, `a`/`d`, `w`/`s`). 78 Hz drawings: `make test APP=pattern`. Glass TTY: `make test APP=term`. Phosphor reel: `make test APP=demos`. CDC attach for any running image: `make monitor`.
+4. Gate: `make test APP=hello` (unique `digest=` + `pong`). 60/78 Hz measure: `make test` (`crt-cross60` banner) then `make monitor` (keys `1`–`4`, `m` 80/132, `r` 60/78, `a`/`d`, `w`/`s`). Analog drawings: `make test APP=pattern` (same `m`/`r`; keys `1`–`6`). Glass TTY: `make test APP=term`. Phosphor reel: `make test APP=demos` (CDC `2` → `scene=radar`; same `m`/`r`; scenes `1`–`5`). CDC attach for any running image: `make monitor`.
 5. Evidence is CDC banner (`digest=` where the app prints one), not ninja exit 0 alone. No board is an explicit HIL skip, not a pass.
 
 ## USB and Docker

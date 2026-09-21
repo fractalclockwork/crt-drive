@@ -218,7 +218,7 @@ Vertical table is the 80-col 60 Hz frame (416/50/6/51, 523 lines, ~59.97 Hz).
 | Back porch | 8 | 0.255 ms |
 | **Total frame** | **402** | **12.831 ms (fV ≈ 77.94 Hz)** |
 
-**Working hypothesis** for porch *widths* on the pattern app (`make test APP=pattern`): 144 MHz / clkdiv 3 → 48 MHz dots, 1530-dot line, **338** active. Do not fold 377-line geometry into that app until the checklist in the test-pattern doc is applied.
+[`apps/pattern`](../apps/pattern/) and [`apps/demos`](../apps/demos/) USB `m`/`r` use the **same scanout** as `cross60` ([`video/scanout.c`](../video/scanout.c)): 128.4 MHz PLL, column H, 377-line 78 Hz, 8 BP. `term` still boots the 144 MHz / 338-line path below.
 
 | Clock | Value |
 | --- | --- |

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-# Phosphor physics attract reel. Configure this directory only:
+# Phosphor physics attract reel at all four Appendix B rates.
 #   cmake -S apps/demos -B build/demos
 # Or from the repo root: make build APP=demos
 
@@ -45,18 +45,31 @@ file(
   "#endif\n"
 )
 
-add_subdirectory("${CRT_REPO_ROOT}/video" "${CMAKE_BINARY_DIR}/crt_video")
-
 add_executable(crt_demos
     main.c
     gfx.c
     scenes.c
+    "${CRT_REPO_ROOT}/video/scanout.c"
 )
+pico_generate_pio_header(crt_demos "${CRT_REPO_ROOT}/video/video_pixel.pio")
+pico_generate_pio_header(crt_demos "${CRT_REPO_ROOT}/video/hsync60.pio")
+pico_generate_pio_header(crt_demos "${CRT_REPO_ROOT}/video/hsync60_132.pio")
+pico_generate_pio_header(crt_demos "${CRT_REPO_ROOT}/video/vsync60.pio")
+pico_generate_pio_header(crt_demos "${CRT_REPO_ROOT}/video/vsync.pio")
 target_include_directories(crt_demos PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    "${CRT_REPO_ROOT}"
+    "${CRT_REPO_ROOT}/video"
 )
-target_link_libraries(crt_demos crt_video hardware_sync)
+target_link_libraries(crt_demos
+    pico_stdlib
+    hardware_pio
+    hardware_dma
+    hardware_clocks
+    hardware_irq
+    hardware_sync
+)
 target_compile_definitions(crt_demos PRIVATE PICO_STDIO_USB_CONNECT_WAIT_MS=5000)
 pico_enable_stdio_usb(crt_demos 1)
 pico_enable_stdio_uart(crt_demos 0)

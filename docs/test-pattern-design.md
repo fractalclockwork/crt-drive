@@ -4,13 +4,13 @@ Canonical visual geometry for v1 Pico-generated patterns. Timings, polarity, and
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
-**Decided for v1:** analog setup is the standalone measure app ([`apps/cross60`](../apps/cross60/), `make test` then `make monitor`). USB: `4` box+grid+plus, `m` 80/132-col, `r` 60/78 Hz, `a`/`d` H phase, `w`/`s` V porch — no reflash. HIL on this MC5 is recorded below. Six 78 Hz drawings stay on `make test APP=pattern` and are **not** updated yet; fold the cross60 record into them later.
+**Decided for v1:** analog setup starts on [`apps/cross60`](../apps/cross60/). Six drawings live in [`apps/pattern`](../apps/pattern/) on the **same four modes** (`m` 80/132, `r` 60/78, boot 60 Hz 80-col). USB: pattern keys `1`–`6`, plus `a`/`d`/`w`/`s`.
 
-**Working hypothesis:** exact line/pixel coordinates for the six `apps/pattern` drawings (still 800 × 338).
+**Working hypothesis:** exact line/pixel coordinates for the six drawings, scaled to the current mode.
 
 ## Role
 
-Firmware **phase 5**. [`apps/cross60`](../apps/cross60/) is the live analog-setup drawing (box, grid, plus) at four Appendix B rates. [`apps/pattern`](../apps/pattern/) still has the six 78 Hz pictures on a 338-line raster. This doc is the drawing spec and the HIL record, not the PIO how-to.
+Firmware **phase 5**. [`apps/cross60`](../apps/cross60/) is the measure drawing. [`apps/pattern`](../apps/pattern/) is the six analog-setup pictures on the same 60/78 × 80/132 scanout ([`video/scanout.c`](../video/scanout.c)). This doc is the drawing spec and the HIL record, not the PIO how-to.
 
 ## Luminance and packing
 
@@ -77,23 +77,26 @@ Settled raster: **377** active (13 × 29), 25-line blank (**8 BP / 11 FP / 6 syn
 | 377 / vbp=12 | 7 / 6 / 12 | 1.8 / 1.5 cm, top line visible |
 | 377 / vbp=8 (**keep**) | 11 / 6 / 8 | centered ~1.65 cm; ~1 cm cells |
 
-### Fold into `apps/pattern` later (do not change that app now)
+### Fold into `apps/pattern` (done)
 
-When the six 78 Hz drawings move off 338-line Appendix B geometry, copy these constraints — do not re-derive them from the old 100 mm-square math (that assumed 338 lines *filled* the 19 cm bezel):
+[`apps/pattern`](../apps/pattern/) uses [`video/scanout.c`](../video/scanout.c): PLL 128.4 MHz, column H from `cross60`, 78 Hz **377 / 8 BP**, `(x/4)^3` packing, interior grid, GP4 in 78 Hz. USB `m`/`r` match the measure app. Boot is 60 Hz 80-col.
 
-1. Same PLL 128.4 MHz and column H as `cross60` if L201 must match 60 Hz. The pattern app’s 144 MHz / 1530-dot 80-col line is a different H width.
-2. 78 Hz active **377**, not 338, if the box must fill like the measure pattern; V DMA **8 BP + 377 + 11 FP + 6 sync**.
-3. Do not eat blanking down to ~12 lines. Retrace symptoms: missing `y=0`, then a hairline at the **top-right**.
-4. `(x/4) ^ 3` packing; interior grid, box owns edges.
-5. ~1 cm cells on this tube are **40 × 29** at 80-col 78 Hz (20×13 boxes), not 80 × 13 character cells. 132-col pitch is **54 × 29** (22×13).
-6. Recompute the 100 mm square, Indian Head letterbox, intensity-band heights, and focus `H` grid from 377-line mm/px (~15.7 cm / 377), not 190 mm / 338.
-7. Dual-rate: never retune VR302/VR303 for a 78 Hz picture. VR301/GP4 is the 78-only size pot if it is wired.
+Drawings scale to the current raster:
 
-## 78 Hz drawings ([`apps/pattern`](../apps/pattern/), later)
+| Drawing | How it follows the mode |
+| --- | --- |
+| Sync-squares | Outer box on `width-1`/`height-1`; 100 mm square from HIL fill (225×170 mm @ 60 Hz, 226×157 mm @ 78 Hz); 80×80 px box; plus at center |
+| Crosshatch | Measure cells **40×26** / **54×26** / **40×29** / **54×29**; box owns edges |
+| Intensity | Four bands of `height/4` |
+| Focus | 26 rows of 10×16 (60 Hz) or 10×14 (78 Hz); 132-col 9-dot cells |
+| Indian Head | Packed 800×338 letterboxed in the current raster |
+| Full-on | Every active pixel bold |
 
-Still the Appendix B **10 × 13** character raster (800 × 338). These coordinates are **not** the HIL-settled 377-line measure pattern. Fold using the checklist above; do not edit this app until then.
+`term` still uses the 338-line 144 MHz [`video/video.c`](../video/video.c) path. Demos share [`video/scanout.c`](../video/scanout.c).
 
-Character cell for 78 Hz, 80 columns: **10 × 13** (80 × 10 = 800 dots, 26 × 13 = 338 lines). Grid lines follow that cell, not a 26-line “square” pitch.
+## 78 Hz drawings ([`apps/pattern`](../apps/pattern/))
+
+Same four modes as `cross60`. Coordinates below were written for Appendix B **10 × 13** (800 × 338); generators now scale from `scanout_width()` / `scanout_height()`. Character-cell focus uses 26 rows at 16 px (60 Hz) or 14 px (78 Hz).
 
 | Pattern | Drawing | Analog use |
 | --- | --- | --- |
@@ -321,5 +324,5 @@ Chassis pots on this MC5: **VR301** 78 Hz V-size, **VR302** 60 Hz V-size (**min 
 ## Open
 
 - Later key emulation (`Ctrl+Shift+F1` … `F4`) if a keyboard path is added; CDC and BOOTSEL are the analog-setup UI.
-- Fold the cross60 HIL record into [`apps/pattern`](../apps/pattern/) (still 338-line drawings).
-- 132-column focus matrix (9 × 13 cell) — later.
+- Fold remaining 338-line drawings in [`apps/term`](../apps/term/) onto `video/scanout.c`.
+- 132-column focus matrix glyph margins if 9×14 is tight.

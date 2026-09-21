@@ -66,7 +66,7 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make build APP=pattern` / `flash` / `test` | 78 Hz analog-setup patterns ([`apps/pattern`](../apps/pattern/) → `build/pattern/crt_pattern.uf2`) |
 | `make build APP=term` / `flash` / `test` | Glass TTY ([`apps/term`](../apps/term/) → `build/term/crt_term.uf2`) |
 | `make term-build` / `term-flash` / `term-monitor` / `term-test` | Aliases for the term app |
-| `make build APP=demos` / `flash` / `test` | Phosphor reel ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
+| `make build APP=demos` / `flash` / `test` | Phosphor reel, four-mode scanout ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
 | `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
 | `make build APP=cross60` / `flash` / `test` | Same as default; 60 Hz 1-pixel plus |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |

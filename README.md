@@ -4,7 +4,7 @@ Programmable CRT drive: sync and video from a microcontroller for analog CRTs an
 
 The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberry Pi Pico (RP2040) replaces the CRT drive ASIC (Wyse 211009-02, U4): it synthesizes active-low `/HSYNC` and `/VSYNC` plus active-high dual video (V0 dim, V1 normal) and drives the existing deflection and neck boards. The original CPU, EPROM, and VRAM bus do not need to run.
 
-**Status:** Injection pads and the Pico + 74AHCT125 carrier (KiCad protoboard) are decided. The Dev-Host Docker toolchain is validated (`make smoke` / `make test APP=hello`). **Default firmware is the 60 Hz 80-col measure pattern** (`make build` / `make flash` / `make test` / `make monitor`): GPIO 0–3, box+grid+plus; USB `m` 80/132-col, `r` 60/78 Hz; `a`/`d`/`w`/`s` nudge H/V phase. 78 Hz pattern drawings: `make build APP=pattern`. Other CRT images: `make build APP=term`, `make build APP=demos`. CRT HIL is in progress after isolation and the 74AHCT125.
+**Status:** Injection pads and the Pico + 74AHCT125 carrier (KiCad protoboard) are decided. The Dev-Host Docker toolchain is validated (`make smoke` / `make test APP=hello`). **Default firmware is the 60 Hz 80-col measure pattern** (`make build` / `make flash` / `make test` / `make monitor`): GPIO 0–3, box+grid+plus; USB `m` 80/132-col, `r` 60/78 Hz; `a`/`d`/`w`/`s` nudge H/V phase. Four-mode analog drawings: `make build APP=pattern`. Phosphor reel: `make build APP=demos` (same `m`/`r`). Glass TTY: `make build APP=term`. CRT HIL is in progress after isolation and the 74AHCT125.
 
 ## Docs
 

@@ -6,17 +6,22 @@
 #include "hardware/structs/ioqspi.h"
 #include "hardware/structs/sio.h"
 
-#include "video.h"
+#include "scanout.h"
 #include "assets/indian_head/indian_head_pattern.h"
 
 #define PATTERN_COUNT       6
 #define BOOTSEL_POLL_US     10000
 #define BOOTSEL_DEBOUNCE_MS 50
 #define BANNER_MS           250
-#define SYNC_SQUARE_SIZE    80   /* equal pixel sides; mm/px */
-#define SYNC_MM_SQUARE_W    320  /* 100 mm on 250 mm bezel: 100/250 * 800 */
-#define SYNC_MM_SQUARE_H    178  /* 100 mm on 190 mm bezel: 100/190 * 338 */
+#define SYNC_SQUARE_SIZE    80
 #define SYNC_CROSS_ARM      12
+#define IH_WIDTH            800
+#define IH_HEIGHT           338
+#define CHAR_ROWS           26
+#define GLYPH_WIDTH         7
+#define GLYPH_HEIGHT        10
+#define GLYPH_ORIGIN_X      1
+#define GLYPH_ORIGIN_Y      1
 
 typedef enum {
     PATTERN_CROSSHATCH = 0,
@@ -30,7 +35,6 @@ typedef enum {
 static const char *pattern_name = "sync-squares";
 static PatternId current_pattern = PATTERN_SYNC_SQUARES;
 
-/* 7x10 H; bit 6 is the left column of the inner cell. */
 static const uint8_t glyph_h[GLYPH_HEIGHT] = {
     0b1000001,
     0b1000001,
@@ -44,100 +48,25 @@ static const uint8_t glyph_h[GLYPH_HEIGHT] = {
     0b1000001,
 };
 
-void generate_crosshatch_pattern(void) {
-    clear_buffer(PIXEL_OFF);
-
-    for (uint16_t x = 80; x < FRAME_WIDTH - 1; x += 80) {
-        for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
-    }
-    for (uint16_t y = 13; y < FRAME_HEIGHT - 1; y += 13) {
-        for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-            set_pixel(x, y, PIXEL_NORMAL);
-        }
-    }
-
-    for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-        set_pixel(x, 0, PIXEL_BOLD);
-        set_pixel(x, FRAME_HEIGHT - 1, PIXEL_BOLD);
-    }
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        set_pixel(0, y, PIXEL_BOLD);
-        set_pixel(FRAME_WIDTH - 1, y, PIXEL_BOLD);
-    }
-
-    const uint16_t cx = FRAME_WIDTH / 2;   /* 400 */
-    const uint16_t cy = FRAME_HEIGHT / 2;  /* 169 */
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        set_pixel(cx - 1, y, PIXEL_BOLD);
-        set_pixel(cx,     y, PIXEL_BOLD);
-        set_pixel(cx + 1, y, PIXEL_BOLD);
-    }
-    for (uint16_t x = 0; x < FRAME_WIDTH; x++) {
-        set_pixel(x, cy - 1, PIXEL_BOLD);
-        set_pixel(x, cy,     PIXEL_BOLD);
-        set_pixel(x, cy + 1, PIXEL_BOLD);
-    }
+static uint16_t mm100_w(void) {
+    uint16_t fill_mm = scanout_mode_78() ? 226 : 225;
+    return (uint16_t)((100u * (uint32_t)scanout_width() + fill_mm / 2u) / fill_mm);
 }
 
-void generate_intensity_bars(void) {
-    static const PixelColor bands[4] = {
-        PIXEL_OFF, PIXEL_DIM, PIXEL_NORMAL, PIXEL_BOLD
-    };
-    const uint16_t base = FRAME_HEIGHT / 4;
-    const uint16_t rem = FRAME_HEIGHT % 4;
-    uint16_t y = 0;
-
-    for (int i = 0; i < 4; i++) {
-        uint16_t h = (uint16_t)(base + (i >= (4 - (int)rem) ? 1 : 0));
-        uint16_t y_end = (uint16_t)(y + h);
-        for (; y < y_end; y++) {
-            fill_active_line(y, bands[i]);
-        }
-    }
-}
-
-static void draw_glyph_h(uint16_t cell_col, uint16_t cell_row, PixelColor color) {
-    uint16_t ox = (uint16_t)(cell_col * CELL_WIDTH + GLYPH_ORIGIN_X);
-    uint16_t oy = (uint16_t)(cell_row * CELL_HEIGHT + GLYPH_ORIGIN_Y);
-
-    for (uint16_t row = 0; row < GLYPH_HEIGHT; row++) {
-        uint8_t bits = glyph_h[row];
-        for (uint16_t col = 0; col < GLYPH_WIDTH; col++) {
-            if (bits & (uint8_t)(1u << (GLYPH_WIDTH - 1 - col))) {
-                set_pixel((uint16_t)(ox + col), (uint16_t)(oy + row), color);
-            }
-        }
-    }
-}
-
-void generate_focus_matrix(void) {
-    const uint16_t cx = (CHAR_COLS - 1) / 2; /* 39 */
-    const uint16_t cy = (CHAR_ROWS - 1) / 2; /* 12 */
-
-    clear_buffer(PIXEL_OFF);
-    for (uint16_t row = 0; row < CHAR_ROWS; row++) {
-        for (uint16_t col = 0; col < CHAR_COLS; col++) {
-            PixelColor color = (col == cx && row == cy) ? PIXEL_BOLD : PIXEL_NORMAL;
-            draw_glyph_h(col, row, color);
-        }
-    }
-}
-
-void generate_full_on_box(void) {
-    clear_buffer(PIXEL_BOLD);
+static uint16_t mm100_h(void) {
+    uint16_t fill_mm = scanout_mode_78() ? 157 : 170;
+    return (uint16_t)((100u * (uint32_t)scanout_height() + fill_mm / 2u) / fill_mm);
 }
 
 static void draw_rect_outline(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
                               PixelColor color) {
     for (uint16_t x = x0; x <= x1; x++) {
-        set_pixel(x, y0, color);
-        set_pixel(x, y1, color);
+        scanout_set_pixel(x, y0, color);
+        scanout_set_pixel(x, y1, color);
     }
     for (uint16_t y = y0; y <= y1; y++) {
-        set_pixel(x0, y, color);
-        set_pixel(x1, y, color);
+        scanout_set_pixel(x0, y, color);
+        scanout_set_pixel(x1, y, color);
     }
 }
 
@@ -152,36 +81,153 @@ static void draw_centered_rect(uint16_t cx, uint16_t cy, uint16_t w, uint16_t h,
 
 static void draw_cross(uint16_t cx, uint16_t cy, uint16_t arm, PixelColor color) {
     for (uint16_t x = (uint16_t)(cx - arm); x <= (uint16_t)(cx + arm); x++) {
-        set_pixel(x, (uint16_t)(cy - 1), color);
-        set_pixel(x, cy, color);
-        set_pixel(x, (uint16_t)(cy + 1), color);
+        scanout_set_pixel(x, (uint16_t)(cy - 1), color);
+        scanout_set_pixel(x, cy, color);
+        scanout_set_pixel(x, (uint16_t)(cy + 1), color);
     }
     for (uint16_t y = (uint16_t)(cy - arm); y <= (uint16_t)(cy + arm); y++) {
-        set_pixel((uint16_t)(cx - 1), y, color);
-        set_pixel(cx, y, color);
-        set_pixel((uint16_t)(cx + 1), y, color);
+        scanout_set_pixel((uint16_t)(cx - 1), y, color);
+        scanout_set_pixel(cx, y, color);
+        scanout_set_pixel((uint16_t)(cx + 1), y, color);
     }
 }
 
-void generate_sync_squares_pattern(void) {
-    const uint16_t cx = FRAME_WIDTH / 2;   /* 400 */
-    const uint16_t cy = FRAME_HEIGHT / 2;  /* 169 */
+void generate_crosshatch_pattern(void) {
+    uint16_t w = scanout_width();
+    uint16_t h = scanout_height();
+    uint16_t cw = scanout_cell_w();
+    uint16_t ch = scanout_cell_h();
+    uint16_t cx = (uint16_t)(w / 2);
+    uint16_t cy = (uint16_t)(h / 2);
 
-    clear_buffer(PIXEL_OFF);
-    draw_rect_outline(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1, PIXEL_BOLD);
-    draw_centered_rect(cx, cy, SYNC_MM_SQUARE_W, SYNC_MM_SQUARE_H, PIXEL_BOLD);
+    scanout_clear(PIXEL_OFF);
+
+    for (uint16_t x = cw; x < w; x += cw) {
+        for (uint16_t y = 0; y < h; y++) {
+            scanout_set_pixel(x, y, PIXEL_NORMAL);
+        }
+    }
+    for (uint16_t y = ch; y < h; y += ch) {
+        for (uint16_t x = 0; x < w; x++) {
+            scanout_set_pixel(x, y, PIXEL_NORMAL);
+        }
+    }
+
+    for (uint16_t x = 0; x < w; x++) {
+        scanout_set_pixel(x, 0, PIXEL_BOLD);
+        scanout_set_pixel(x, (uint16_t)(h - 1), PIXEL_BOLD);
+    }
+    for (uint16_t y = 0; y < h; y++) {
+        scanout_set_pixel(0, y, PIXEL_BOLD);
+        scanout_set_pixel((uint16_t)(w - 1), y, PIXEL_BOLD);
+    }
+
+    for (uint16_t y = 0; y < h; y++) {
+        scanout_set_pixel((uint16_t)(cx - 1), y, PIXEL_BOLD);
+        scanout_set_pixel(cx, y, PIXEL_BOLD);
+        scanout_set_pixel((uint16_t)(cx + 1), y, PIXEL_BOLD);
+    }
+    for (uint16_t x = 0; x < w; x++) {
+        scanout_set_pixel(x, (uint16_t)(cy - 1), PIXEL_BOLD);
+        scanout_set_pixel(x, cy, PIXEL_BOLD);
+        scanout_set_pixel(x, (uint16_t)(cy + 1), PIXEL_BOLD);
+    }
+}
+
+void generate_intensity_bars(void) {
+    static const PixelColor bands[4] = {
+        PIXEL_OFF, PIXEL_DIM, PIXEL_NORMAL, PIXEL_BOLD
+    };
+    uint16_t height = scanout_height();
+    uint16_t base = (uint16_t)(height / 4);
+    uint16_t rem = (uint16_t)(height % 4);
+    uint16_t y = 0;
+
+    for (int i = 0; i < 4; i++) {
+        uint16_t bh = (uint16_t)(base + (i >= (4 - (int)rem) ? 1 : 0));
+        uint16_t y_end = (uint16_t)(y + bh);
+        for (; y < y_end; y++) {
+            scanout_fill_line(y, bands[i]);
+        }
+    }
+}
+
+static void draw_glyph_h(uint16_t cell_col, uint16_t cell_row, PixelColor color) {
+    uint16_t cw = scanout_char_w();
+    uint16_t ch = scanout_char_h();
+    uint16_t ox = (uint16_t)(cell_col * cw + GLYPH_ORIGIN_X);
+    uint16_t oy = (uint16_t)(cell_row * ch + GLYPH_ORIGIN_Y);
+
+    for (uint16_t row = 0; row < GLYPH_HEIGHT; row++) {
+        uint8_t bits = glyph_h[row];
+        for (uint16_t col = 0; col < GLYPH_WIDTH; col++) {
+            if (bits & (uint8_t)(1u << (GLYPH_WIDTH - 1 - col))) {
+                scanout_set_pixel((uint16_t)(ox + col), (uint16_t)(oy + row), color);
+            }
+        }
+    }
+}
+
+void generate_focus_matrix(void) {
+    uint16_t cw = scanout_char_w();
+    uint16_t cols = (uint16_t)(scanout_width() / cw);
+    uint16_t cx = (uint16_t)((cols - 1) / 2);
+    uint16_t cy = (CHAR_ROWS - 1) / 2;
+
+    scanout_clear(PIXEL_OFF);
+    for (uint16_t row = 0; row < CHAR_ROWS; row++) {
+        for (uint16_t col = 0; col < cols; col++) {
+            PixelColor color = (col == cx && row == cy) ? PIXEL_BOLD : PIXEL_NORMAL;
+            draw_glyph_h(col, row, color);
+        }
+    }
+}
+
+void generate_full_on_box(void) {
+    scanout_clear(PIXEL_BOLD);
+}
+
+void generate_sync_squares_pattern(void) {
+    uint16_t w = scanout_width();
+    uint16_t h = scanout_height();
+    uint16_t cx = (uint16_t)(w / 2);
+    uint16_t cy = (uint16_t)(h / 2);
+
+    scanout_clear(PIXEL_OFF);
+    draw_rect_outline(0, 0, (uint16_t)(w - 1), (uint16_t)(h - 1), PIXEL_BOLD);
+    draw_centered_rect(cx, cy, mm100_w(), mm100_h(), PIXEL_BOLD);
     draw_centered_rect(cx, cy, SYNC_SQUARE_SIZE, SYNC_SQUARE_SIZE, PIXEL_NORMAL);
     draw_cross(cx, cy, SYNC_CROSS_ARM, PIXEL_BOLD);
 }
 
+static PixelColor ih_pixel(const uint8_t *row, uint16_t x) {
+    uint8_t shift = (uint8_t)((3 - (x % 4)) * 2);
+    return (PixelColor)((row[x / 4] >> shift) & 0b11);
+}
+
 void generate_indian_head_pattern(void) {
-    for (uint16_t y = 0; y < FRAME_HEIGHT; y++) {
-        memcpy(frame_buffer[y], indian_head_packed[y], BYTES_PER_LINE);
-        memset(&frame_buffer[y][BYTES_PER_LINE], 0, LINE_STRIDE - BYTES_PER_LINE);
+    uint16_t w = scanout_width();
+    uint16_t h = scanout_height();
+    int ox = ((int)w - (int)IH_WIDTH) / 2;
+    int oy = ((int)h - (int)IH_HEIGHT) / 2;
+
+    scanout_clear(PIXEL_OFF);
+    for (uint16_t y = 0; y < IH_HEIGHT; y++) {
+        int dy = oy + (int)y;
+        if (dy < 0 || dy >= (int)h) {
+            continue;
+        }
+        const uint8_t *src = indian_head_packed[y];
+        for (uint16_t x = 0; x < IH_WIDTH; x++) {
+            int dx = ox + (int)x;
+            if (dx < 0 || dx >= (int)w) {
+                continue;
+            }
+            scanout_set_pixel((uint16_t)dx, (uint16_t)dy, ih_pixel(src, x));
+        }
     }
 }
 
-/* BOOTSEL is flash CS. Sample from RAM with XIP Hi-Z (pico-examples picoboard/button). */
 static bool __no_inline_not_in_flash_func(get_bootsel_button)(void) {
     const uint cs_pin_index = 1;
     uint32_t flags = save_and_disable_interrupts();
@@ -235,7 +281,7 @@ static void apply_pattern(PatternId id) {
         pattern_name = "crosshatch";
         break;
     }
-    printf("crt-pattern pattern=%s 78Hz\n", pattern_name);
+    scanout_print_status(pattern_name);
     if (id == PATTERN_FULL_ON) {
         printf("full-on is a beam-current stress pattern; switch off when done\n");
     }
@@ -264,21 +310,53 @@ static void poll_bootsel(void) {
     }
 }
 
+static VideoMode toggle_cols(VideoMode m) {
+    switch (m) {
+    case MODE_60_80:
+        return MODE_60_132;
+    case MODE_60_132:
+        return MODE_60_80;
+    case MODE_78_80:
+        return MODE_78_132;
+    default:
+        return MODE_78_80;
+    }
+}
+
+static VideoMode toggle_hz(VideoMode m) {
+    switch (m) {
+    case MODE_60_80:
+        return MODE_78_80;
+    case MODE_78_80:
+        return MODE_60_80;
+    case MODE_60_132:
+        return MODE_78_132;
+    default:
+        return MODE_60_132;
+    }
+}
+
+static void apply_mode(VideoMode mode) {
+    scanout_set_mode(mode);
+    apply_pattern(current_pattern);
+}
+
 static void print_pattern_help(void) {
-    printf("crt-pattern 78Hz: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus  4/n indian-head  5/o full-on  6/s sync-squares\n");
+    printf("crt-pattern: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus\n");
+    printf("  4/n indian-head  5/o full-on  6 sync-squares  m 80/132  r 60/78\n");
+    printf("  a/d H 16px  A/D 64px  w/s V 1 line  W/S 5 lines  0 reset  ? help\n");
+    scanout_print_status(pattern_name);
 }
 
 int main(void) {
-    video_set_sys_clock();
-    stdio_init_all();
-
 #ifdef PICO_DEFAULT_LED_PIN
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 #endif
 
+    scanout_init(pio0);
+    stdio_init_all();
     apply_pattern(PATTERN_SYNC_SQUARES);
-    video_start(pio0);
     print_pattern_help();
 
     absolute_time_t next_banner = make_timeout_time_ms(BANNER_MS);
@@ -314,9 +392,51 @@ int main(void) {
                 apply_pattern(PATTERN_FULL_ON);
                 break;
             case '6':
-            case 's':
-            case 'S':
                 apply_pattern(PATTERN_SYNC_SQUARES);
+                break;
+            case 'm':
+            case 'M':
+                apply_mode(toggle_cols(scanout_mode()));
+                break;
+            case 'r':
+            case 'R':
+                apply_mode(toggle_hz(scanout_mode()));
+                break;
+            case 'a':
+                scanout_nudge_h(-1);
+                scanout_print_status(pattern_name);
+                break;
+            case 'd':
+                scanout_nudge_h(1);
+                scanout_print_status(pattern_name);
+                break;
+            case 'A':
+                scanout_nudge_h(-4);
+                scanout_print_status(pattern_name);
+                break;
+            case 'D':
+                scanout_nudge_h(4);
+                scanout_print_status(pattern_name);
+                break;
+            case 'w':
+                scanout_nudge_v(-1);
+                scanout_print_status(pattern_name);
+                break;
+            case 's':
+                scanout_nudge_v(1);
+                scanout_print_status(pattern_name);
+                break;
+            case 'W':
+                scanout_nudge_v(-5);
+                scanout_print_status(pattern_name);
+                break;
+            case 'S':
+                scanout_nudge_v(5);
+                scanout_print_status(pattern_name);
+                break;
+            case '0':
+                scanout_reset_timing();
+                scanout_print_status(pattern_name);
                 break;
             case '?':
                 print_pattern_help();
@@ -331,7 +451,7 @@ int main(void) {
 #ifdef PICO_DEFAULT_LED_PIN
             gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
 #endif
-            printf("crt-pattern pattern=%s 78Hz\n", pattern_name);
+            scanout_print_status(pattern_name);
         }
     }
 }

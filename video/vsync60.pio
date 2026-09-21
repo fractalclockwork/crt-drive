@@ -1,0 +1,31 @@
+; /VSYNC on SET pin (GPIO 3). Idle high, 6-line active-low pulse.
+; Paced by IRQ 0 from hsync. One wrap = 523 lines.
+;
+; H is a 1024-dot line at 32.1 MHz (Pico PLL 128.4 MHz / 4), not 48 MHz / 1530.
+; 32.1e6/1024/523 = 59.938 Hz. Blanking 50 FP + 6 sync + 51 BP
+; (40-line earlier than 10/91: HIL top was 2 cm, raster still tall).
+; DMA after IRQ 2 rewind: 51 BP, 416 active, 50 FP, 6 sync.
+
+.program vsync60
+
+.wrap_target
+    set pins, 1
+    set x, 15                       ; 16 * 32 = 512 waits
+high_outer:
+    set y, 31
+high_inner:
+    wait 1 irq 0
+    jmp y-- high_inner
+    jmp x-- high_outer
+    set x, 4                        ; 5 more → 517 high lines
+high_remain:
+    wait 1 irq 0
+    jmp x-- high_remain
+
+    set pins, 0
+    set x, 5                        ; 6 low lines
+low_lines:
+    wait 1 irq 0
+    jmp x-- low_lines
+    irq 2                           ; DMA rewind; not a wait
+.wrap

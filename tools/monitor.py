@@ -27,12 +27,13 @@ PORT_GLOBS = (
 HELP = {
     "pattern": (
         "pattern: 1/c crosshatch  2/i intensity  3/f focus  4/n indian-head  "
-        "5/o full-on  6/s sync-squares  BOOTSEL cycles  ? help  q quit"
+        "5/o full-on  6 sync-squares  m 80/132  r 60/78  a/d H  w/s V  0 reset  "
+        "BOOTSEL cycles  ? help  q quit"
     ),
     "term": "term: type to the glass TTY; ? status; Ctrl-C quit",
     "demos": (
-        "demos: 1/s starfield  2/r radar  3/l lissajous  4/x xor  5/w wireframe  "
-        "a next  ? help  q quit"
+        "demos: 1 starfield  2 radar  3/l lissajous  4/x xor  5 wireframe  "
+        "n next  m 80/132  r 60/78  a/d H  w/s V  0 reset  ? help  q quit"
     ),
     "cross60": (
         "cross60: 1 plus  2 box  3 grid  4 meas  m 80/132  r 60/78  "
