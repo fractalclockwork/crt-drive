@@ -55,7 +55,7 @@ static void print_banner(void) {
 
 static void print_help(void) {
     printf("crt-demos: BOOTSEL/n cycles  1 starfield  2 radar  3/l lissajous  4/x xor  5 wireframe\n");
-    printf("  m 80/132  r 60/78  a/d H 16px  A/D 64px  w/s V 1 line  W/S 5 lines  0 reset  ? help\n");
+    printf("  6/t text  m 80/132  r 60/78  a/d H 16px  A/D 64px  w/s V 1 line  W/S 5 lines  0 reset  ? help\n");
     print_banner();
 }
 
@@ -158,6 +158,11 @@ int main(void) {
                 break;
             case '5':
                 apply_scene(SCENE_WIREFRAME);
+                break;
+            case '6':
+            case 't':
+            case 'T':
+                apply_scene(SCENE_TEXT);
                 break;
             case 'n':
             case 'N':

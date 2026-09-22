@@ -33,7 +33,7 @@ HELP = {
     "term": "term: type to the glass TTY; ? status; Ctrl-C quit",
     "demos": (
         "demos: 1 starfield  2 radar  3/l lissajous  4/x xor  5 wireframe  "
-        "n next  m 80/132  r 60/78  a/d H  w/s V  0 reset  ? help  q quit"
+        "6/t text  n next  m 80/132  r 60/78  a/d H  w/s V  0 reset  ? help  q quit"
     ),
     "cross60": (
         "cross60: 1 plus  2 box  3 grid  4 meas  m 80/132  r 60/78  "

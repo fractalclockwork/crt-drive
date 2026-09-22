@@ -3,14 +3,15 @@
 
 #include <stdint.h>
 
-#define SCENE_COUNT 5
+#define SCENE_COUNT 6
 
 typedef enum {
     SCENE_STARFIELD = 0,
     SCENE_RADAR,
     SCENE_LISSAJOUS,
     SCENE_XOR,
-    SCENE_WIREFRAME
+    SCENE_WIREFRAME,
+    SCENE_TEXT
 } SceneId;
 
 void scenes_init(void);

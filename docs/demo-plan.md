@@ -2,13 +2,13 @@
 
 RP2040 attract-mode firmware for green-phosphor physics scenes. Raster, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). PIO / DMA how-to lives in [firmware-plan.md](firmware-plan.md). Analog-setup patterns stay in [test-pattern-design.md](test-pattern-design.md). Glass TTY stays in [terminal-plan.md](terminal-plan.md).
 
-Sources: [`video/scanout.c`](../video/scanout.c) (shared four-mode scanout), [`apps/demos/`](../apps/demos/) (`crt_demos` UF2). Scene keys `1`–`5` stay distinct from pattern/cross60 `m`/`r` timing keys.
+Sources: [`video/scanout.c`](../video/scanout.c) (shared four-mode scanout), [`font/`](../font/) (UTF-8 TrueType), [`apps/demos/`](../apps/demos/) (`crt_demos` UF2). Scene keys `1`–`6` stay distinct from pattern/cross60 `m`/`r` timing keys.
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
 ## Handoff
 
-**Decided for this slice:** five phosphor-physics scenes, software 2-bpp fade, USB CDC + BOOTSEL. Scene holds until a key or BOOTSEL. Unicode Matrix rain is **not** in this UF2; it waits for a refined Unicode terminal and should use real tube afterglow ([terminal-plan.md](terminal-plan.md)).
+**Decided for this slice:** six scenes (five phosphor-physics plus a static Unicode text page), software 2-bpp fade on the physics reel, USB CDC + BOOTSEL. Scene holds until a key or BOOTSEL. Unicode Matrix rain is **not** in this UF2; it waits for a refined Unicode terminal and should use real tube afterglow ([terminal-plan.md](terminal-plan.md)).
 
 **Still open:** fade dwell on a live CRT after the 74AHCT125.
 
@@ -18,9 +18,9 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 USB CDC / BOOTSEL
         |
         v
-scene tick (starfield, radar, lissajous, xor, wireframe)
+scene tick (starfield, radar, lissajous, xor, wireframe, text)
         |
-        | packed fade + Bresenham / circle (apps/demos)
+        | packed fade + Bresenham / circle, or TrueType blit (apps/demos + font/)
         v
 scanout framebuffer (800×416 / 1188×416 / 800×377 / 1188×377 @ 2 bpp)
         |
@@ -33,7 +33,7 @@ PIO pixel / hsync / vsync  --> GPIO 0-3
 | --- | --- | --- | --- |
 | `make build` / `make flash` | [`apps/pattern`](../apps/pattern/) (`crt_pattern`) | Analog-setup drawings (default) | `1`–`6` / BOOTSEL; `crt-pattern` banner |
 | `make build APP=term` | [`apps/term`](../apps/term/) (`crt_term`) | Glass TTY | host bytes; `crt-term digest=` |
-| `make build APP=demos` | [`apps/demos`](../apps/demos/) (`crt_demos`) | Phosphor reel | `1`–`5` scenes; `m`/`r`; `crt-demos digest=` |
+| `make build APP=demos` | [`apps/demos`](../apps/demos/) (`crt_demos`) | Phosphor reel | `1`–`6` scenes; `m`/`r`; `crt-demos digest=` |
 | `make monitor` | running UF2 | CDC attach | banner detect |
 
 `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` are aliases.
@@ -49,6 +49,7 @@ Boot default is starfield at **60 Hz 80-col**. The scene holds until a scene key
 | `3` / `l` | Lissajous | 3:2 quadrature plot with fade trails |
 | `4` / `x` | XOR | Full-active packed `(x ^ y) + phase` chevrons (no fade) |
 | `5` | Wireframe | Rotating cube, all 12 edges, fade trails |
+| `6` / `t` | Text | Static Noto Sans UTF-8 sample (Latin / Greek / Cyrillic); CRT pixel-aspect |
 | `n` | Next scene | Same as BOOTSEL |
 | `m` | 80 / 132-col | Shared scanout |
 | `r` | 60 / 78 Hz | Shared scanout; GP4 high in 78 Hz |

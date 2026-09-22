@@ -1,6 +1,7 @@
 #include "scenes.h"
 
 #include "gfx.h"
+#include "font.h"
 #include "scanout.h"
 
 #include <stdint.h>
@@ -309,8 +310,33 @@ static void tick_wireframe(void) {
     cube_pitch = (uint8_t)(cube_pitch + 1u);
 }
 
+static void reset_text(void) {
+    static const char *lines[] = {
+        "crt-drive  Noto Sans",
+        "The quick brown fox jumps over the lazy dog.",
+        "Latin  café naïve — 12.5°",
+        "Greek  Αθηνά  αβγδ  Ωμέγα",
+        "Cyrillic  Привет  мир",
+        "Marks  “quotes”  € £ ¥  ©",
+    };
+    int x = 24;
+    int y = 36;
+
+    font_set_size(26.0f);
+    y += (int)(font_line_height() * 0.8f);
+    font_draw_utf8(x, y, lines[0], PIXEL_BOLD);
+
+    font_set_size(16.0f);
+    float lh = font_line_height();
+    for (unsigned i = 1; i < sizeof(lines) / sizeof(lines[0]); i++) {
+        y += (int)(lh + 6.0f);
+        font_draw_utf8(x, y, lines[i], PIXEL_NORMAL);
+    }
+}
+
 void scenes_init(void) {
     gfx_init();
+    font_init();
 }
 
 void scene_reset(SceneId id) {
@@ -328,6 +354,9 @@ void scene_reset(SceneId id) {
         break;
     case SCENE_WIREFRAME:
         reset_wireframe();
+        break;
+    case SCENE_TEXT:
+        reset_text();
         break;
     case SCENE_STARFIELD:
     default:
@@ -350,6 +379,8 @@ void scene_tick(SceneId id) {
     case SCENE_WIREFRAME:
         tick_wireframe();
         break;
+    case SCENE_TEXT:
+        break;
     case SCENE_STARFIELD:
     default:
         tick_starfield();
@@ -367,6 +398,8 @@ const char *scene_name(SceneId id) {
         return "xor";
     case SCENE_WIREFRAME:
         return "wireframe";
+    case SCENE_TEXT:
+        return "text";
     case SCENE_STARFIELD:
     default:
         return "starfield";
