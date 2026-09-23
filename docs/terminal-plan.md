@@ -2,7 +2,7 @@
 
 RP2040 terminal firmware, separate from the analog-setup pattern generator. Raster, polarity, and GPIO map live in [hardware-design.md](hardware-design.md). PIO / DMA how-to lives in [firmware-plan.md](firmware-plan.md). Patterns stay in [test-pattern-design.md](test-pattern-design.md).
 
-Sources: [`video/`](../video/) (shared 78 Hz 80-col scanout), [`apps/term/`](../apps/term/) (`crt_term` UF2). Do not mix host bytes with pattern CDC keys.
+Sources: [`video/scanout.c`](../video/scanout.c) (four-mode scanout, `(x/4)^3` packing), [`apps/term/`](../apps/term/) (`crt_term` UF2). Do not mix host bytes with pattern CDC keys. Term boots **78 Hz 80-col** and does not steal `m`/`r`.
 
 Status language: **Decided**, **Working hypothesis**, **Open**.
 
@@ -10,9 +10,9 @@ Status language: **Decided**, **Working hypothesis**, **Open**.
 
 The pattern firmware (`crt_pattern`) is the service tool: sync-squares, crosshatch, intensity, focus, Indian Head, full-on. This doc is the start of a real terminal emulator on the same injection path (Pico + 74AHCT125, pads V0/V1/H/V/GND).
 
-**Decided for this slice:** glass TTY only. 78 Hz, 80×26, 10×13 cells, 7×10 glyphs. USB CDC is the host port. Character grid is the source of truth; `frame_buffer` is the scanout cache. No personality parser, keyboard, UART, or 132-column PIO.
+**Decided for this slice:** glass TTY only. Boots 78 Hz 80-col on the HIL scanout. Character cells follow WY-120 maintenance manual 880491-01 Appendix B (below). USB CDC is the host port. Character grid is the source of truth; pixels go through `scanout_set_pixel`. No personality parser, keyboard, or UART. BOOTSEL cycles the four Appendix B formats for a glass check and redraws the specimen. Host bytes are still the session (`m` / `r` are not mode keys).
 
-**Still open:** measured 78 Hz porch *widths* (same as the pattern firmware); 132-column porch split; which personality to implement first after the glass TTY is HIL-green.
+**Still open:** which personality to implement first after the glass TTY is HIL-green.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ TermCell[26][80]     (codepoint + reserved attr)
         |
         | dirty cell blit
         v
-frame_buffer (800x338 @ 2 bpp)
+scanout framebuffer (800×377 @ 2 bpp, 78 Hz 80-col)
         |
         | DMA (shared with crt_pattern)
         v
@@ -44,17 +44,18 @@ Two UF2s, **separate CMake projects** under [`apps/`](../apps/):
 
 `make build` / `make flash` default to the pattern app. Terminal: `make term-build` / `term-flash` / `term-monitor` / `term-test` (or `APP=term`).
 
-## 78 Hz display formats
+## Display formats
 
-From the WY-120 intro (26 lines in both). First slice implements the 80-column row only.
+From WY-120 maintenance manual 880491-01 (26 lines in each format). Term uses these cells. The pattern grid’s 14 px 78 Hz pitch is only the HIL fill (`26 × 14 = 364` of 377) and is not the character cell.
 
-| Refresh | Lines | Columns | Cell | Matrix | Active raster | Status |
-| :---: | :---: | :---: | :---: | :---: | :---: | --- |
-| 78 Hz | 26 | 80 | 10×13 | 7×10 | 800×338 | **Decided** (same PIO as patterns) |
-| 78 Hz | 26 | 132 | 9×13 | 7×10 | 1188×338 | later; new `hsync` wrap |
-| 60 Hz | 26 | 80 / 132 | 10×16 / 9×16 | 7×12 | 800×416 / 1188×416 | 60 Hz scanout in `cross60` (`m` toggles); TTY still 78 Hz |
+| Refresh | Lines | Columns | Cell | Matrix | Where the ink sits |
+| :---: | :---: | :---: | :---: | :---: | --- |
+| 60 Hz | 26 | 80 | 10×16 | 7×12 | origin (1, 1); 2 px right, 3 px bottom |
+| 60 Hz | 26 | 132 | 9×16 | 7×12 | origin (1, 1); 1 px right, 3 px bottom |
+| 78 Hz | 26 | 80 | 10×13 | 7×10 | origin (1, 1); 2 px right, 2 px bottom |
+| 78 Hz | 26 | 132 | 9×13 | 7×10 | origin (1, 1); 1 px right, 2 px bottom |
 
-**Working hypothesis** for 132-column 78 Hz: line total stays 1530 dots @ 48 MHz (same 31.373 kHz H), so active 1188 + blanking 342. Cell is 9×13 with the same 7×10 glyph at origin (1, 1) and 1 px right margin. Framebuffer ≈ 338 × 300 bytes (~101 KB). Confirm porches on a WY-120 before freezing PIO delays.
+**Decided.** 78 Hz rows are 26 × 13 = 338 lines inside the 377-line HIL raster (39 lines unused under the block). 60 Hz 26 × 16 fills 416. The 60 Hz 7×12 matrix repeats rows 4 and 8 of the 7×10 artwork. 132-column scanout is the same 1530-dot line as pattern.
 
 ## Screen model
 
@@ -65,10 +66,10 @@ typedef struct {
     uint16_t cp;   /* BMP codepoint; 0 = blank */
     uint8_t  attr; /* reserved: dim/bold/reverse/underline/blink */
     uint8_t  flags;
-} TermCell;        /* 80 * 26 * 4 = 8320 bytes */
+} TermCell;        /* 132 * 26 * 4 = 13728 bytes */
 ```
 
-Glyph blit uses the 10×13 cell already used by the focus matrix: 7×10 ink at (+1, +1), 2 px right and bottom margin. `attr` is stored but unused in this slice (draw `PIXEL_NORMAL`). Unmapped codepoints keep the real `cp` and draw `.notdef`.
+Glyph blit uses the Appendix B cell for the current mode, 7-wide ink at (+1, +1). `attr` is stored but unused in this slice (draw `PIXEL_NORMAL`). Unmapped codepoints keep the real `cp` and draw `.notdef`. Pixels use `scanout_set_pixel` (`(x/4)^3`).
 
 ### SRAM budget (this slice)
 
@@ -76,16 +77,16 @@ RP2040 has 264 KB. Rough:
 
 | Block | Bytes |
 | --- | ---: |
-| `frame_buffer` 338 × 204 | 68,952 |
-| `TermCell[26][80]` | 8,320 |
-| 7×10 ASCII font + `.notdef` | ~1.3 KB |
+| scanout framebuffer (416 × stride, shared with pattern) | ~135 KB |
+| `TermCell[26][132]` | 13,728 |
+| 7×10 ASCII font + Latin-1 sample + `.notdef` | ~1.5 KB |
 | Pico SDK / stacks | tens of KB |
 
 Headroom remains for later pages, 132-col cells, and extra Unicode bitmaps.
 
 ### Scroll
 
-**Decided.** LF that would leave row 25: memmove the cell grid one row, memmove 13 scanlines × 25 in `frame_buffer`, clear the last cell row and its pixels.
+**Decided.** LF that would leave row 25: memmove the cell grid one row, `scanout_scroll` by one cell height, clear the last cell row.
 
 ## Glass TTY
 
@@ -93,7 +94,7 @@ Headroom remains for later pages, 132-col cells, and extra Unicode bitmaps.
 
 | Input | Action |
 | --- | --- |
-| UTF-8 → BMP codepoint | put at cursor, column + 1; wrap at column 80 (row + 1, scroll if needed) |
+| UTF-8 → BMP codepoint | put at cursor, column + 1; wrap at 80 or 132 (row + 1, scroll if needed) |
 | CR (0x0D) | column 0 |
 | LF (0x0A) | row + 1, scroll at the bottom |
 | BS (0x08) | column − 1 if column > 0; no wrap to the previous line |
@@ -105,16 +106,18 @@ Headroom remains for later pages, 132-col cells, and extra Unicode bitmaps.
 Idle banner (until the first host byte, then silent except `?`):
 
 ```text
-crt-term digest=<id> 78Hz 80x26
+crt-term digest=<id> 78Hz 80x26 cursor=col,row
 ```
 
 `?` also prints `cursor=col,row`. Do not print a 250 ms banner forever: that would corrupt a host session.
 
 ## Font
 
-**Decided for this slice:** [`apps/term/font_7x10.c`](../apps/term/font_7x10.c), U+0020–U+007E, 10 bytes/glyph, bit 6 = left column (same packing as the pattern `H`). `.notdef` for everything else.
+**Decided for this slice:** [`apps/term/font_7x10.c`](../apps/term/font_7x10.c), U+0020–U+007E, 10 bytes/glyph, bit 6 = left column (same packing as the pattern `H`). Lowercase `m` is three stems with two-pixel counters (`##..##.` / `#..#..#`), not a four-stem picket. Latin-1 `é è ê ë á à ó ú ñ ç` are the base letter plus an accent in the two blank rows above the x-height (`ç` uses the blank row under `c`). Anything else draws `.notdef` (circle with an X).
 
 Original Wyse soft fonts (four 128-character fonts in 8K font RAM, loaded from the 27C512) are a later pack. Do not dump the EPROM in this slice. Unicode extras are more 7×10 bitmaps, not a second renderer.
+
+Boot paints a specimen (mode label, `Hello café`, a row of `m`, the alphabets, and `éèêë áàóú ñç`) and leaves the cursor at column 0 of row 0. BOOTSEL advances 78×80 → 78×132 → 60×80 → 60×132 and repaints that specimen.
 
 ## Original terminal features (backlog)
 

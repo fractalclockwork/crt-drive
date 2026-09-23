@@ -1,5 +1,4 @@
 ; /HSYNC on SET pin (GPIO 2). Idle high, 111-dot active-low pulse.
-; Shared copy for video/scanout.c (pattern) and apps/cross60.
 ; Pico PLL_SYS 128.4 MHz / clkdiv 4 → 32.1 MHz dots.
 ; One wrap = 1024 dots (31.963 us, 31.348 kHz). 523 lines → 59.938 Hz.
 ;

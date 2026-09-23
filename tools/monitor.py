@@ -30,7 +30,7 @@ HELP = {
         "5/o full-on  6 sync-squares  m 80/132  r 60/78  a/d H  w/s V  0 reset  "
         "BOOTSEL cycles  ? help  q quit"
     ),
-    "term": "term: type to the glass TTY; ? status; Ctrl-C quit",
+    "term": "term: type to the glass TTY; BOOTSEL cycles 78/60 x 80/132; ? status; Ctrl-C quit",
     "demos": (
         "demos: 1 starfield  2 radar  3/l lissajous  4/x xor  5 wireframe  "
         "6/t text  n next  m 80/132  r 60/78  a/d H  w/s V  0 reset  ? help  q quit"

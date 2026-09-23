@@ -17,6 +17,17 @@
 #define SYNC_CROSS_ARM      12
 #define IH_WIDTH            800
 #define IH_HEIGHT           338
+/* 4:3 card inside the pack. Side columns are the retrace stimulus, not the picture. */
+#define IH_CARD_X           176
+#define IH_CARD_Y           1
+#define IH_CARD_W           448
+#define IH_CARD_H           336
+/* Vertical pitch / horizontal pitch on this MC5: (154 mm / 504) / (214 mm / 1968). */
+#define IH_PITCH_NUM        281
+#define IH_PITCH_DEN        100
+#define IH_BURST_X          632
+#define IH_BURST_W          160
+#define IH_BURST_Y          56
 #define CHAR_ROWS           26
 #define GLYPH_WIDTH         7
 #define GLYPH_HEIGHT        10
@@ -92,46 +103,40 @@ static void draw_cross(uint16_t cx, uint16_t cy, uint16_t arm, PixelColor color)
     }
 }
 
-void generate_crosshatch_pattern(void) {
+static void pack_pixel(uint8_t *row, uint16_t x, PixelColor color);
+
+/* One pixel at the factory 32.1 MHz dot clock. Neighbors stay dark so the
+ * stars do not chain into strokes. */
+static uint32_t mc_state;
+
+static uint32_t mc_next(void) {
+    uint32_t x = mc_state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    mc_state = x;
+    return x;
+}
+
+static void generate_monte_carlo(void) {
     uint16_t w = scanout_width();
     uint16_t h = scanout_height();
-    uint16_t cw = scanout_cell_w();
-    uint16_t ch = scanout_cell_h();
-    uint16_t cx = (uint16_t)(w / 2);
-    uint16_t cy = (uint16_t)(h / 2);
+    const uint16_t step = 18;
 
     scanout_clear(PIXEL_OFF);
-
-    for (uint16_t x = cw; x < w; x += cw) {
-        for (uint16_t y = 0; y < h; y++) {
-            scanout_set_pixel(x, y, PIXEL_NORMAL);
+    mc_state = 0xA341316Cu;
+    for (uint16_t y = 2; y + 2 < h; y = (uint16_t)(y + step)) {
+        for (uint16_t x = 2; x + 2 < w; x = (uint16_t)(x + step)) {
+            uint16_t jx = (uint16_t)(mc_next() % (step - 4));
+            uint16_t jy = (uint16_t)(mc_next() % (step - 4));
+            scanout_set_pixel((uint16_t)(x + jx), (uint16_t)(y + jy), PIXEL_BOLD);
         }
     }
-    for (uint16_t y = ch; y < h; y += ch) {
-        for (uint16_t x = 0; x < w; x++) {
-            scanout_set_pixel(x, y, PIXEL_NORMAL);
-        }
-    }
+    printf("monte carlo %ux%u  1-dot stars\n", (unsigned)w, (unsigned)h);
+}
 
-    for (uint16_t x = 0; x < w; x++) {
-        scanout_set_pixel(x, 0, PIXEL_BOLD);
-        scanout_set_pixel(x, (uint16_t)(h - 1), PIXEL_BOLD);
-    }
-    for (uint16_t y = 0; y < h; y++) {
-        scanout_set_pixel(0, y, PIXEL_BOLD);
-        scanout_set_pixel((uint16_t)(w - 1), y, PIXEL_BOLD);
-    }
-
-    for (uint16_t y = 0; y < h; y++) {
-        scanout_set_pixel((uint16_t)(cx - 1), y, PIXEL_BOLD);
-        scanout_set_pixel(cx, y, PIXEL_BOLD);
-        scanout_set_pixel((uint16_t)(cx + 1), y, PIXEL_BOLD);
-    }
-    for (uint16_t x = 0; x < w; x++) {
-        scanout_set_pixel(x, (uint16_t)(cy - 1), PIXEL_BOLD);
-        scanout_set_pixel(x, cy, PIXEL_BOLD);
-        scanout_set_pixel(x, (uint16_t)(cy + 1), PIXEL_BOLD);
-    }
+void generate_crosshatch_pattern(void) {
+    generate_monte_carlo();
 }
 
 void generate_intensity_bars(void) {
@@ -205,27 +210,64 @@ static PixelColor ih_pixel(const uint8_t *row, uint16_t x) {
     return (PixelColor)((row[x / 4] >> shift) & 0b11);
 }
 
+static void pack_pixel(uint8_t *row, uint16_t x, PixelColor color) {
+    uint16_t byte_idx = (uint16_t)((x / 4) ^ 3);
+    uint8_t shift = (uint8_t)((3 - (x % 4)) * 2);
+
+    row[byte_idx] &= (uint8_t)~(0b11 << shift);
+    row[byte_idx] |= (uint8_t)((color & 0b11) << shift);
+}
+
+/* Three levels in the /HSYNC window. A leak is vertical bars, not the card. */
+static PixelColor retrace_bar(uint16_t x) {
+    if (x < 80) {
+        return PIXEL_DIM;
+    }
+    if (x < 96) {
+        return PIXEL_OFF;
+    }
+    if (x < 176) {
+        return PIXEL_NORMAL;
+    }
+    if (x < 192) {
+        return PIXEL_OFF;
+    }
+    return PIXEL_BOLD;
+}
+
 void generate_indian_head_pattern(void) {
     uint16_t w = scanout_width();
     uint16_t h = scanout_height();
-    int ox = ((int)w - (int)IH_WIDTH) / 2;
-    int oy = ((int)h - (int)IH_HEIGHT) / 2;
+    uint32_t dst_w32 = (uint32_t)IH_CARD_W * h * IH_PITCH_NUM / (IH_CARD_H * IH_PITCH_DEN);
+    uint16_t dst_h = h;
+    uint16_t dst_w = dst_w32 > w ? w : (uint16_t)dst_w32;
+    uint16_t ox = (uint16_t)((w - dst_w) / 2);
 
     scanout_clear(PIXEL_OFF);
-    for (uint16_t y = 0; y < IH_HEIGHT; y++) {
-        int dy = oy + (int)y;
-        if (dy < 0 || dy >= (int)h) {
-            continue;
-        }
-        const uint8_t *src = indian_head_packed[y];
-        for (uint16_t x = 0; x < IH_WIDTH; x++) {
-            int dx = ox + (int)x;
-            if (dx < 0 || dx >= (int)w) {
-                continue;
-            }
-            scanout_set_pixel((uint16_t)dx, (uint16_t)dy, ih_pixel(src, x));
+    for (uint16_t y = 0; y < dst_h; y++) {
+        uint16_t sy = (uint16_t)(IH_CARD_Y + (uint32_t)y * IH_CARD_H / dst_h);
+        const uint8_t *src = indian_head_packed[sy];
+        for (uint16_t x = 0; x < dst_w; x++) {
+            uint16_t sx = (uint16_t)(IH_CARD_X + (uint32_t)x * IH_CARD_W / dst_w);
+            scanout_set_pixel((uint16_t)(ox + x), y, ih_pixel(src, sx));
         }
     }
+
+    /* Outside the frame: vertical bars during /HSYNC, horizontal bursts on
+     * the vertical porch and sync. Both stay dark if blanking holds. */
+    uint8_t *hsync = scanout_retrace_hsync();
+    memset(hsync, 0, SCANOUT_RETRACE_BYTES);
+    for (uint16_t x = 0; x < SCANOUT_RETRACE_BYTES * 4; x++) {
+        pack_pixel(hsync, x, retrace_bar(x));
+    }
+    uint8_t *vblank = scanout_retrace_vblank();
+    memset(vblank, 0, scanout_store_bytes());
+    const uint8_t *burst = indian_head_packed[IH_BURST_Y];
+    for (uint16_t x = 0; x < w; x++) {
+        uint16_t sx = (uint16_t)(IH_BURST_X + (x % IH_BURST_W));
+        pack_pixel(vblank, x, ih_pixel(burst, sx));
+    }
+    scanout_retrace_test(true);
 }
 
 static bool __no_inline_not_in_flash_func(get_bootsel_button)(void) {
@@ -253,6 +295,8 @@ static bool __no_inline_not_in_flash_func(get_bootsel_button)(void) {
 }
 
 static void apply_pattern(PatternId id) {
+    scanout_retrace_test(false);
+    scanout_margin_blips(false);
     current_pattern = id;
     switch (id) {
     case PATTERN_INTENSITY:
@@ -278,7 +322,7 @@ static void apply_pattern(PatternId id) {
     case PATTERN_CROSSHATCH:
     default:
         generate_crosshatch_pattern();
-        pattern_name = "crosshatch";
+        pattern_name = "monte-carlo";
         break;
     }
     scanout_print_status(pattern_name);
@@ -343,7 +387,9 @@ static void apply_mode(VideoMode mode) {
 
 static void print_pattern_help(void) {
     printf("crt-pattern: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus\n");
-    printf("  4/n indian-head  5/o full-on  6 sync-squares  m 80/132  r 60/78\n");
+    printf("  4/n indian-head  5/o full-on  6 sync-squares  r 60/78\n");
+    printf("  raster %u x %u  (factory max 1188 x 416)\n",
+           (unsigned)scanout_width(), (unsigned)scanout_height());
     printf("  a/d H 16px  A/D 64px  w/s V 1 line  W/S 5 lines  0 reset  ? help\n");
     scanout_print_status(pattern_name);
 }
@@ -356,7 +402,7 @@ int main(void) {
 
     scanout_init(pio0);
     stdio_init_all();
-    apply_pattern(PATTERN_SYNC_SQUARES);
+    apply_pattern(PATTERN_CROSSHATCH);
     print_pattern_help();
 
     absolute_time_t next_banner = make_timeout_time_ms(BANNER_MS);

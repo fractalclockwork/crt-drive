@@ -1,0 +1,34 @@
+; /VSYNC on SET pin (GPIO 3). Idle high, 6-line active-low pulse.
+; Pattern-only. Term and demos keep video/vsync_full.pio (434 lines).
+; Paced by IRQ 0 from hsync. One wrap = 494 lines.
+;
+; fH is 31.329 kHz, so this frame is 63.4 Hz. Longer than the 434-line
+; wrap so the 78 Hz ramp (VR301, GPIO4 high) can reach further down the
+; glass. Back porch stays 8 lines (the retrace guard).
+;
+; DMA split: 8 BP + 476 active + 4 FP + 6 sync.
+; IRQ 2 at wrap: rewind the DMA line-pointer table (once per frame).
+
+.program vsync
+
+.wrap_target
+    set pins, 1
+    set x, 14                       ; 15 * 32 = 480 waits
+high_outer:
+    set y, 31
+high_inner:
+    wait 1 irq 0
+    jmp y-- high_inner
+    jmp x-- high_outer
+    set x, 7                        ; 8 more waits → 488 high lines
+high_remain:
+    wait 1 irq 0
+    jmp x-- high_remain
+
+    set pins, 0
+    set x, 5                        ; 6 low lines
+low_lines:
+    wait 1 irq 0
+    jmp x-- low_lines
+    irq 2                           ; DMA rewind; not a wait
+.wrap

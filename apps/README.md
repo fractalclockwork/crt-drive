@@ -7,5 +7,5 @@
 #   make monitor               # USB CDC; follows whichever app is running
 #   make test                  # HIL for APP=cross60 (default); APP=pattern|term|demos|hello
 #
-# Four-mode scanout (cross60 + pattern + demos): video/scanout.c, USB m 80/132, r 60/78.
-# term still uses video/video.c (338-line 78 Hz). USB bring-up is hello_pico/.
+# Four-mode scanout (cross60 + pattern + demos + term): video/scanout.c.
+# Term boots 78 Hz 80-col; host bytes are not m/r keys. USB bring-up is hello_pico/.

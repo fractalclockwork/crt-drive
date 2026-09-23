@@ -15,9 +15,9 @@ static void utf8_reset(void) {
 
 static void tty_lf(void) {
     cur_row++;
-    if (cur_row >= CHAR_ROWS) {
+    if (cur_row >= screen_rows()) {
         screen_scroll_up();
-        cur_row = (uint16_t)(CHAR_ROWS - 1);
+        cur_row = (uint16_t)(screen_rows() - 1);
     }
 }
 
@@ -27,7 +27,7 @@ static void tty_put_cp(uint16_t cp) {
     }
     screen_put(cur_col, cur_row, cp);
     cur_col++;
-    if (cur_col >= CHAR_COLS) {
+    if (cur_col >= screen_cols()) {
         cur_col = 0;
         tty_lf();
     }
@@ -44,7 +44,7 @@ static void tty_control(uint8_t b) {
         break;
     case 0x09: /* TAB */
         cur_col = (uint16_t)((cur_col + 8u) & ~7u);
-        if (cur_col >= CHAR_COLS) {
+        if (cur_col >= screen_cols()) {
             cur_col = 0;
             tty_lf();
         }
@@ -65,6 +65,12 @@ void tty_init(void) {
     cur_col = 0;
     cur_row = 0;
     screen_init();
+}
+
+void tty_home(void) {
+    utf8_reset();
+    cur_col = 0;
+    cur_row = 0;
 }
 
 void tty_cursor(uint16_t *col, uint16_t *row) {

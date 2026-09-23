@@ -1,3 +1,4 @@
+#include <string.h>
 #include "font.h"
 
 /* 7x10; bit 6 is the left column. U+0020-U+007E plus .notdef. */
@@ -83,7 +84,7 @@ static const uint8_t font_ascii[95][GLYPH_HEIGHT] = {
     /* 0x6a j */ {0x04, 0x00, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x44, 0x38, 0x00},
     /* 0x6b k */ {0x40, 0x40, 0x44, 0x48, 0x50, 0x60, 0x50, 0x48, 0x44, 0x00},
     /* 0x6c l */ {0x18, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x3e, 0x00},
-    /* 0x6d m */ {0x00, 0x00, 0x6a, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00},
+    /* 0x6d m */ {0x00, 0x00, 0x66, 0x49, 0x49, 0x49, 0x49, 0x49, 0x49, 0x00},
     /* 0x6e n */ {0x00, 0x00, 0x5e, 0x61, 0x41, 0x41, 0x41, 0x41, 0x41, 0x00},
     /* 0x6f o */ {0x00, 0x00, 0x3e, 0x41, 0x41, 0x41, 0x41, 0x41, 0x3e, 0x00},
     /* 0x70 p */ {0x00, 0x00, 0x5e, 0x61, 0x41, 0x41, 0x61, 0x5e, 0x40, 0x40},
@@ -103,10 +104,55 @@ static const uint8_t font_ascii[95][GLYPH_HEIGHT] = {
     /* 0x7e ~ */ {0x00, 0x00, 0x31, 0x4a, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00},
 };
 
+/* One composed glyph at a time. The blit copies the bits before the next call. */
+static uint8_t accent_buf[GLYPH_HEIGHT];
+
+static const uint8_t *overlay_top(const uint8_t *base, uint8_t row0, uint8_t row1) {
+    memcpy(accent_buf, base, GLYPH_HEIGHT);
+    accent_buf[0] = row0;
+    accent_buf[1] = row1;
+    return accent_buf;
+}
+
+static const uint8_t *overlay_cedilla(const uint8_t *base) {
+    memcpy(accent_buf, base, GLYPH_HEIGHT);
+    accent_buf[9] = 0x08;
+    return accent_buf;
+}
+
+static const uint8_t *ascii_glyph(char ch) {
+    return font_ascii[(uint8_t)ch - 0x20u];
+}
+
 const uint8_t *font_glyph(uint16_t cp) {
     if (cp >= 0x20u && cp <= 0x7Eu) {
         return font_ascii[cp - 0x20u];
     }
-    return font_notdef;
+    /* WY-120 multinational matches Latin-1 for these letters.
+       Acute is high on the right; grave is high on the left. */
+    switch (cp) {
+    case 0x00E1u: /* á */
+        return overlay_top(ascii_glyph('a'), 0x04, 0x08);
+    case 0x00E0u: /* à */
+        return overlay_top(ascii_glyph('a'), 0x10, 0x08);
+    case 0x00E9u: /* é */
+        return overlay_top(ascii_glyph('e'), 0x04, 0x08);
+    case 0x00E8u: /* è */
+        return overlay_top(ascii_glyph('e'), 0x10, 0x08);
+    case 0x00EAu: /* ê */
+        return overlay_top(ascii_glyph('e'), 0x08, 0x14);
+    case 0x00EBu: /* ë */
+        return overlay_top(ascii_glyph('e'), 0x14, 0x00);
+    case 0x00F3u: /* ó */
+        return overlay_top(ascii_glyph('o'), 0x04, 0x08);
+    case 0x00FAu: /* ú */
+        return overlay_top(ascii_glyph('u'), 0x04, 0x08);
+    case 0x00F1u: /* ñ */
+        return overlay_top(ascii_glyph('n'), 0x18, 0x0c);
+    case 0x00E7u: /* ç */
+        return overlay_cedilla(ascii_glyph('c'));
+    default:
+        return font_notdef;
+    }
 }
 

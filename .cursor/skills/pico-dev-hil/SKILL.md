@@ -18,8 +18,9 @@ From the repository root: `make help`. Never `apt install gcc-arm-none-eabi`, ne
 1. `make pico-discover` — `2e8a:000a` CDC (app running), `2e8a:0003` BOOTSEL (load), none = skip HIL and say so.
 2. Edit sources in this git tree (bind-mounted at `/workspace` in the container).
 3. Compile: `make build` (60 Hz plus, default), `make build APP=pattern`, `make build APP=term`, `make build APP=demos`, or `make build APP=hello` (bring-up).
-4. Gate: `make test APP=hello` (unique `digest=` + `pong`). 60/78 Hz measure: `make test` (`crt-cross60` banner) then `make monitor` (keys `1`–`4`, `m` 80/132, `r` 60/78, `a`/`d`, `w`/`s`). Analog drawings: `make test APP=pattern` (same `m`/`r`; keys `1`–`6`). Glass TTY: `make test APP=term`. Phosphor reel: `make test APP=demos` (CDC `2` → `scene=radar`; same `m`/`r`; scenes `1`–`6`). CDC attach for any running image: `make monitor`.
+4. Gate: `make test APP=hello` (unique `digest=` + `pong`). 60/78 Hz measure: `make test` (`crt-cross60` banner) then `make monitor` (keys `1`–`4`, `m` 80/132, `r` 60/78, `a`/`d`, `w`/`s`). Analog drawings: `make test APP=pattern` (same `m`/`r`; keys `1`–`6`). Glass TTY: `make test APP=term` (BOOTSEL cycles 78/60 × 80/132; host bytes stay the session). Phosphor reel: `make test APP=demos` (CDC `2` → `scene=radar`; same `m`/`r`; scenes `1`–`6`). CDC attach for any running image: `make monitor`.
 5. Evidence is CDC banner (`digest=` where the app prints one), not ninja exit 0 alone. No board is an explicit HIL skip, not a pass.
+6. Camera HIL always starts with `make camera-check` before any glass picture is trusted. That live C310 view selects crosshatch on `crt-pattern` or the measure box on `crt-cross60`, and it exits 0 only when that raster is visible and inside the frame on every side. `make camera` is the same view left open. A clipped tube or a corner of text is not a pass.
 
 ## USB and Docker
 

@@ -218,7 +218,7 @@ Vertical table is the 80-col 60 Hz frame (416/50/6/51, 523 lines, ~59.97 Hz).
 | Back porch | 8 | 0.255 ms |
 | **Total frame** | **402** | **12.831 ms (fV ≈ 77.94 Hz)** |
 
-[`apps/pattern`](../apps/pattern/) and [`apps/demos`](../apps/demos/) USB `m`/`r` use the **same scanout** as `cross60` ([`video/scanout.c`](../video/scanout.c)): 128.4 MHz PLL, column H, 377-line 78 Hz, 8 BP. `term` still boots the 144 MHz / 338-line path below.
+[`apps/pattern`](../apps/pattern/), [`apps/demos`](../apps/demos/), and [`apps/term`](../apps/term/) use the **same scanout** as `cross60` ([`video/scanout.c`](../video/scanout.c)): 128.4 MHz PLL, column H, 377-line 78 Hz, 8 BP. Term boots that 78 Hz 80-col raster. The 144 MHz / 338-line table below is the earlier scope path.
 
 | Clock | Value |
 | --- | --- |

@@ -42,11 +42,25 @@ uint16_t scanout_char_h(void);
 void scanout_set_pixel(uint16_t x, uint16_t y, PixelColor color);
 void scanout_clear(PixelColor color);
 void scanout_fill_line(uint16_t y, PixelColor color);
+void scanout_scroll(uint16_t lines);
 uint8_t *scanout_row(uint16_t y);
 uint16_t scanout_store_bytes(void);
 uint8_t scanout_hpad(void);
 uint8_t scanout_vbp(void);
 uint8_t scanout_vfp(void);
+
+/* 272 dots clocked inside the 289-dot /HSYNC. Packed like the framebuffer. */
+#define SCANOUT_RETRACE_BYTES 68
+
+uint8_t *scanout_retrace_hsync(void);
+uint8_t *scanout_retrace_vblank(void);
+void scanout_retrace_test(bool on);
+
+/* Dots clocked after the stored line, before /HSYNC. Packed like the framebuffer. */
+uint8_t *scanout_margin_right(void);
+uint16_t scanout_margin_right_dots(void);
+/* Porch lines (not sync) show scanout_retrace_vblank(). The active frame stays put. */
+void scanout_margin_blips(bool on);
 
 void scanout_nudge_h(int delta_words);
 void scanout_nudge_v(int delta_lines);

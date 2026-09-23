@@ -53,12 +53,25 @@ Bezel **24.6 cm × 19.0 cm**. Factory Section 3: **11 mm ±2 mm** each side, bot
 
 | Mode | Dot clock | Line | Active | `/HSYNC` | `/VSYNC` | Grid cells | Boxes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 60 Hz 80-col | 32.1 MHz (clkdiv 4) | 1024 | 800 × 416 | 113 FP / 111 sync / 0 BP | 50 FP / 6 sync / 51 BP | 40 × 26 | 20 × 16 |
-| 60 Hz 132-col | ~47.988 MHz (clkdiv 2.675) | 1530 | 1188 × 416 | 176 / 166 / 0 | same 523-line V | 54 × 26 | 22 × 16 |
-| 78 Hz 80-col | same 32.1 MHz as 80-col | 1024 | 800 × **377** | same 80-col H | 11 FP / 6 sync / 8 BP | 40 × **29** | 20 × 13 |
-| 78 Hz 132-col | same ~48 MHz as 132-col | 1530 | 1188 × **377** | same 132-col H | same 402-line V | 54 × **29** | 22 × 13 |
+| 60 Hz | 83.428 MHz (clkdiv 394/256) | 2663 | **1968** × **504** | 294 FP / 289 sync / 0 BP | 8 FP / 6 sync / 5 BP (still 523 lines) | 40 × **24** | 49 × 21 |
+| 78 Hz | same 83.428 MHz | 2663 | **1968** × **416** | same H | 4 FP / 6 sync / 8 BP (434 lines, 72.2 Hz) | 40 × **26** | 52 × 16 |
 
-78 Hz **keeps the current column H** so L201 width matches 60 Hz. Factory ASIC ran 78 Hz 80-col as 800/1530 @ 48 MHz; that would shrink the 80-col box on this HIL.
+Factory ceilings were 800 and 1188 dots at ~32 or ~48 MHz. This line is 2080 dots at the same ~31.33 kHz, so the box stays the size L201 already set. 2080 is the 2 bpp width that still links `term` and `demos`.
+
+Both refresh rates share that 2080-dot line, so `m` does not change the box. Factory 78 Hz 80-col was 800/1530 at 48 MHz and would shrink the box on this HIL.
+
+The pattern 78 Hz wrap is **434** lines (72.2 Hz). Width is **1968** dots so the 504-line 60 Hz buffer still links. Back porch stays 8. The right frame stroke is **3 dots**; a 1-dot stroke at `x = width - 1` dropped out and the edge jumped one cell. Term and demos keep this same 434-line wrap. The 377-line notes below are the earlier 402-line frame. The 2080 × 476 / 63.4 Hz try is the glass table below; it is not the running raster.
+
+**78 Hz margin blips** (crosshatch only, RCA edge marks). The 1968 × 416 frame stays the picture. Past it: 3-dot ticks every 32 dots, the first 33 dots to the right of the frame, and one center dash on each back-porch line (above) and front-porch line (below). A lit blip is still scanned. A missing one is in blanking. Sync lines stay black.
+
+**Glass, bezel lit, brightness and contrast at maximum** (C310, inner opening taken as 24.6 × 19.0 cm):
+
+| Banner | Box | Left | Right | Top | Bottom |
+| --- | --- | --- | --- | --- | --- |
+| `78Hz 1968x416 crosshatch hpad=0 vbp=8 vfp=4` | 21.4 × 12.9 cm | 1.0 cm | 2.2 cm | 3.3 cm | 2.8 cm |
+| `78Hz 2080x476 crosshatch hpad=0 vbp=8 vfp=4` | 22.7 × 14.8 cm | 1.0 cm | 0.9 cm | 2.4 cm | 1.8 cm |
+
+The top line is present at `vbp=8`. 2080 × 476 is the pattern SRAM ceiling (a few hundred bytes under `0x20040000`). Pattern 60 Hz is 476 lines in the 523-line frame. Frame: [glass/78Hz-2080x476.jpg](glass/78Hz-2080x476.jpg).
 
 **Packing (decided).** 2 bpp MSB-first, 32-bit LE DMA, PIO shift-left: `set_pixel` stores at `(x/4) ^ 3`. An 80 px grid hid the swap (lines at `x % 16 == 0`). A 40 px grid showed repeating **24 then 56** px pairs. Do not add a second vertical at `x = width-1` on top of the box (that made the last 80-col cell 79 px). Interior grid starts at one cell in; the bold box owns the raster edges.
 
@@ -89,10 +102,10 @@ Drawings scale to the current raster:
 | Crosshatch | Measure cells **40×26** / **54×26** / **40×29** / **54×29**; box owns edges |
 | Intensity | Four bands of `height/4` |
 | Focus | 26 rows of 10×16 (60 Hz) or 10×14 (78 Hz); 132-col 9-dot cells |
-| Indian Head | Packed 800×338 letterboxed in the current raster |
+| Indian Head | 4:3 center frame only. Side columns are the retrace stimulus |
 | Full-on | Every active pixel bold |
 
-`term` still uses the 338-line 144 MHz [`video/video.c`](../video/video.c) path. Demos share [`video/scanout.c`](../video/scanout.c).
+`term` and demos share [`video/scanout.c`](../video/scanout.c). Term boots 78 Hz 80-col.
 
 ## 78 Hz drawings ([`apps/pattern`](../apps/pattern/))
 
@@ -246,19 +259,11 @@ void generate_focus_matrix(void) {
 
 ### Indian Head
 
-**Working hypothesis.** Wikimedia Commons SVG ([`assets/indian_head/`](../assets/indian_head/SOURCE.md)), public domain in the US. The 78 Hz raster is 800 × 338 (~2.37:1); the card is 4:3, so it is letterboxed to **448 × 336** at `(176, 1)` rather than stretched. White paper becomes off; black ink becomes bold; gray wedges invert onto dim/normal/bold. The portrait ellipse stays a positive 4-level image so hair stays dark.
+The measurement is the **center frame**: the 4:3 card (448 × 336 at `(176, 1)` in the 800 × 338 pack), scaled to a round 4:3 picture that fills the active height. White paper becomes off; black ink becomes bold; gray wedges invert onto dim/normal/bold. The portrait ellipse stays a positive 4-level image so hair stays dark. Wikimedia Commons SVG ([`assets/indian_head/`](../assets/indian_head/SOURCE.md)), public domain in the US.
 
-Side columns use the leftover width for analog identity of **V0** and **V1**:
+The left vertical bars and the right horizontal bursts are **not** part of that picture. They are the signal outside the frame. `generate_indian_head_pattern` clocks the three bars (dim / normal / bold) during `/HSYNC`, and puts the right-hand burst on the vertical porch and sync lines. Our scanout emits that signal; the chassis blanking has to hide it. Brightness and contrast stay at maximum so a leak is visible: vertical bars mean horizontal blanking failed, horizontal lines mean vertical blanking failed. A clean center frame means both held.
 
-| Region | Drawing | Analog use |
-| --- | --- | --- |
-| Left `x = 16…56` | Solid dim (V0 only) + 2 px burst | V0 path, bloom |
-| Left `x = 64…104` | Solid normal (V1 only) + 2 px burst | V1 path, bloom |
-| Left `x = 112…160` | Solid bold (V0+V1) + 2 px burst | Peak white |
-| Right bands | Bold 1/2/4/8 px bursts; dim and normal 2 px bursts; vertical Nyquist | 48 MHz bandwidth, per-channel MTF |
-| Outer box | Bold `x = 0, 799` and `y = 0, 337` | Overscan |
-
-`generate_indian_head_pattern` copies [`indian_head_packed`](../assets/indian_head/indian_head_pattern.h) into `frame_buffer` and clears the trailing off word. Rebuild the header on the Dev-Host (ImageMagick + Pillow), not inside `pico-dev`: `python3 tools/pack_indian_head.py`.
+Pitch used for the round frame is the lit 1968 × 504 raster on this MC5, 214 mm × 154 mm (2.81 line-pitches per dot). Rebuild the header on the Dev-Host (ImageMagick + Pillow), not inside `pico-dev`: `python3 tools/pack_indian_head.py`.
 
 ## Load order
 
@@ -316,7 +321,7 @@ The 78 Hz 3-pixel cross looking like an “H” was the stroke (`x = 399` and `4
 | Grid cells | Equal 80 × 13 steps; use for H/V size, phase, linearity, pincushion |
 | Intensity bars | Four distinct levels, no smear or bloom into neighbors |
 | Focus matrix | Sharp in the center; corners show yoke/focus limits |
-| Indian Head | Circles round; wedges show H/V resolution; left bars are three distinct levels |
+| Indian Head | Center frame only; circles round. No left bars, no right bursts. A leak there is blanking |
 | IC401 / neck | 0 V / +5 V on V0/V1 matching the luminance table |
 
 Chassis pots on this MC5: **VR301** 78 Hz V-size, **VR302** 60 Hz V-size (**min ≈ 11 mm** top/bottom on this tube), **VR303** V-linearity, **VR201** H-hold, **L201** H-width (11 mm ±2 mm each side). Do not work a powered chassis until the anode-cap discharge path is known.
@@ -324,5 +329,5 @@ Chassis pots on this MC5: **VR301** 78 Hz V-size, **VR302** 60 Hz V-size (**min 
 ## Open
 
 - Later key emulation (`Ctrl+Shift+F1` … `F4`) if a keyboard path is added; CDC and BOOTSEL are the analog-setup UI.
-- Fold remaining 338-line drawings in [`apps/term`](../apps/term/) onto `video/scanout.c`.
+- 132-column glass TTY (host bytes stay distinct from `m`/`r`).
 - 132-column focus matrix glyph margins if 9×14 is tight.

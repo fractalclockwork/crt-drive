@@ -10,7 +10,7 @@ The Link MC5 / WY-120 first-target hardware path is wrapped: injection pads, Pic
 
 **Decided for v1:** pads V0/V1/H/V/GND, carrier U1 74AHCT125, GPIO 0–3. First raster is **60 Hz 80-col** (Pico PLL 128.4 MHz / clkdiv 4 → 32.1 MHz dots, 1024-dot line). 78 Hz (144 MHz / 3 → 48 MHz, 1530-dot line) is later. Three PIO SMs. Pixel blanking is FIFO stall plus one trailing off word per stored line (16 pixels).
 
-**Still open:** fold 377-line scanout into [`apps/term`](../apps/term/) (still 338 / 48 BP at 144 MHz). Pattern and demos use [`video/scanout.c`](../video/scanout.c).
+Pattern, demos, and term use [`video/scanout.c`](../video/scanout.c). Term boots 78 Hz 80-col (377 / 8 BP). [`video/video.c`](../video/video.c) is the earlier 338-line driver and is not linked.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ PIO hsync SM  --> GPIO 2   --> 74AHCT125 --> pad H
 PIO vsync SM  --> GPIO 3   --> 74AHCT125 --> pad V
 ```
 
-Target clock (60 Hz foundation): `sys_clk` = 128.4 MHz, PIO clkdiv = 4.00 → 32.1 MHz dots. [`apps/pattern`](../apps/pattern/) and [`apps/demos`](../apps/demos/) share that scanout. `term` still uses 144 MHz / 3 → 48 MHz.
+Target clock (60 Hz foundation): `sys_clk` = 128.4 MHz, PIO clkdiv = 4.00 → 32.1 MHz dots. [`apps/pattern`](../apps/pattern/), [`apps/demos`](../apps/demos/), and [`apps/term`](../apps/term/) share that scanout.
 
 ## PIO mapping
 
@@ -377,6 +377,6 @@ On the CRT (after isolation and 5 V level shift):
 
 1. ~~Three PIO SMs vs combined timing SM~~ — three SMs.
 2. ~~Pixel SM blanking: stall vs padded full-raster DMA~~ — FIFO stall + trailing off word.
-3. [`apps/cross60`](../apps/cross60/), [`apps/pattern`](../apps/pattern/), and [`apps/demos`](../apps/demos/) 78 Hz porch widths are HIL-settled (377 / 11 / 6 / 8). `term` still uses 338 / 10 / 6 / 48.
+3. [`apps/cross60`](../apps/cross60/), [`apps/pattern`](../apps/pattern/), [`apps/demos`](../apps/demos/), and [`apps/term`](../apps/term/) 78 Hz porch widths are HIL-settled (377 / 11 / 6 / 8).
 4. 60 Hz: Pico PLL 128.4 MHz / 4 = 32.1 MHz dots, **1024**/line (800/113/111/0), 523 lines, V **50/6/51**. Box **22.5 × 17.0 cm**; VR302 min ≈ 11 mm V; H ~1 cm after 111-dot `/HSYNC`. 78 Hz on the same analog: 377 lines, ~1.65 cm V, ~1 cm cells. Polarity is factory active-low.
 5. Factory-key pattern switching is optional UI; USB CDC and BOOTSEL are the analog-setup switch.

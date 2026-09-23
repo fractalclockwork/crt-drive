@@ -70,6 +70,8 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
 | `make build APP=cross60` / `flash` / `test` | Same as default; 60 Hz 1-pixel plus |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
+| `make camera` | Live Logitech C310 view on this host (not in the Pico container). Selects crosshatch on `crt-pattern`, or the measure box on `crt-cross60`, and overlays whether that raster is fully framed |
+| `make camera-check` | Same view. Exits 0 only after the raster stays fully inside the picture. Every camera HIL starts here |
 
 Build artifacts land on the bind mount (`hello_pico/build/`, `build/<app>/`), owned as your uid for non-USB `compose run`.
 

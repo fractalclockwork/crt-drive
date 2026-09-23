@@ -11,26 +11,33 @@
 #include "hsync60.pio.h"
 #include "hsync60_132.pio.h"
 #include "vsync60.pio.h"
+#ifdef CRT_VSYNC_PUSH
+#include "vsync_push.pio.h"
+#else
 #include "vsync.pio.h"
+#endif
 
 #define SM_PIXEL        0
 #define SM_HSYNC        1
 #define SM_VSYNC        2
 
 #define CRT_SYS_CLK_KHZ 128400
+/* Factory basis. 80-col: clkdiv 4 → 32.1 MHz, 1024-dot line.
+ * 132-col: clkdiv 2.675 → ~48 MHz, 1530-dot line. Same fH, so L201 stays. */
 #define PIO_CLKDIV_80   4.0f
 #define PIO_CLKDIV_132  (128400.0f / 48000.0f)
 #define PIO_IRQ_REWIND  2
 
 #define WIDTH_80        800
 #define WIDTH_132       1188
-#define HEIGHT_60       416
-#define HEIGHT_78       377
+#define HEIGHT_60       416                 /* 26 × 16 */
+#define HEIGHT_78       377                 /* 13 × 29 */
 #define FB_HEIGHT       HEIGHT_60
 #define V_SYNC_LINES    6
-#define V_BLANK_60      107
-#define V_BLANK_78      25
-#define LINES_MAX       (HEIGHT_60 + V_BLANK_60)
+#define V_LINES_60      523
+#define V_BLANK_60      107                 /* 50 FP + 6 sync + 51 BP */
+#define V_BLANK_78      25                  /* 11 FP + 6 sync + 8 BP; 402-line frame */
+#define LINES_MAX       V_LINES_60
 #define CELL_W_80       40
 #define CELL_W_132      54
 #define CELL_H_60       26
@@ -38,26 +45,42 @@
 #define CHAR_W_80       10
 #define CHAR_W_132      9
 #define CHAR_H_60       16
-#define CHAR_H_78       14                  /* 26 × 14 = 364 of 377 */
+#define CHAR_H_78       14
 #define H_PAD_WORDS     5
 #define H_PAD_BYTES     (H_PAD_WORDS * 4)
-#define PIXEL_STORE     300
+#define PIXEL_STORE     300                 /* 1188/4 = 297, 32-bit padded */
 #define TAIL_BYTES      4
 #define STORE_STRIDE    (H_PAD_BYTES + PIXEL_STORE + TAIL_BYTES)
-#define DMA_BYTES_80    204
-#define DMA_BYTES_132   304
+/* Active pixels plus 16 black dots. The porch is a FIFO stall holding black.
+ * A longer DMA runs into the next line and paints vertical streaks. */
+#define DMA_BYTES_80    204                 /* 200 px + 4 off */
+#define DMA_BYTES_132   304                 /* 300 store + 4 off */
+_Static_assert(DMA_BYTES_80 / 4 * 16 < 1024, "80-col DMA fits the 1024-dot line");
+_Static_assert(DMA_BYTES_132 / 4 * 16 < 1530, "132-col DMA fits the 1530-dot line");
 #define H_DELAY_MAX     H_PAD_WORDS
 #define V_BP_DEFAULT_60 51
 #define V_BP_DEFAULT_78 8
 #define V_BP_MIN        1
+/* Kept for the retrace-mark API. Not chained onto the factory line. */
+#define STIM_WORDS      17
+#define SUFFIX_WORDS    17
 
 static uint8_t frame_buffer[FB_HEIGHT][STORE_STRIDE] __attribute__((aligned(4)));
 static uint32_t blank_line[STORE_STRIDE / 4] __attribute__((aligned(4)));
+static uint32_t vblank_line[STORE_STRIDE / 4] __attribute__((aligned(4)));
+static uint32_t suffix[SUFFIX_WORDS] __attribute__((aligned(4)));
 static const uint32_t *line_ptrs[LINES_MAX];
 static uint32_t dma_rx_dummy;
 static int data_chan;
+static int suffix_chan;
+static int reload_chan;
 static int drain_chan;
 static int kick_chan;
+/* Suffix DMA increments its read address. The reload channel writes this
+ * pointer back at the end of every line so the margin ticks repeat. */
+static uint32_t suffix_reload_addr;
+static bool retrace_test;
+static bool margin_blips;
 
 static PIO pio_crt;
 static uint offset_pixel;
@@ -102,6 +125,8 @@ static float mode_clkdiv(void) {
 static uint dma_words(uint8_t delay_words) {
     return delay_words + mode_dma_bytes() / 4;
 }
+
+static void rebuild_line_table(uint8_t delay_words, uint8_t v_bp);
 
 static uint8_t *pixel_base(uint16_t y) {
     return &frame_buffer[y][H_PAD_BYTES];
@@ -179,6 +204,18 @@ void scanout_fill_line(uint16_t y, PixelColor color) {
     memset(pixel_base(y) + store, 0, PIXEL_STORE + TAIL_BYTES - store);
 }
 
+void scanout_scroll(uint16_t lines) {
+    uint16_t h = scanout_height();
+    if (lines == 0 || lines >= h) {
+        scanout_clear(PIXEL_OFF);
+        return;
+    }
+    memmove(frame_buffer[0], frame_buffer[lines], (size_t)(h - lines) * STORE_STRIDE);
+    for (uint16_t y = (uint16_t)(h - lines); y < h; y++) {
+        memset(frame_buffer[y], 0, STORE_STRIDE);
+    }
+}
+
 uint8_t *scanout_row(uint16_t y) {
     if (y >= FB_HEIGHT) {
         return pixel_base(0);
@@ -202,30 +239,84 @@ uint8_t scanout_vfp(void) {
     return (uint8_t)(mode_v_blank() - V_SYNC_LINES - v_back_porch);
 }
 
+uint8_t *scanout_retrace_hsync(void) {
+    return (uint8_t *)(suffix + (SUFFIX_WORDS - STIM_WORDS));
+}
+
+uint8_t *scanout_retrace_vblank(void) {
+    return (uint8_t *)vblank_line + H_PAD_BYTES;
+}
+
+void scanout_retrace_test(bool on) {
+    retrace_test = on;
+    if (!on) {
+        memset(suffix, 0, sizeof(suffix));
+        memset(vblank_line, 0, sizeof(vblank_line));
+    }
+    rebuild_line_table(h_delay_words, v_back_porch);
+}
+
+uint8_t *scanout_margin_right(void) {
+    return (uint8_t *)suffix;
+}
+
+uint16_t scanout_margin_right_dots(void) {
+    return (uint16_t)((SUFFIX_WORDS - STIM_WORDS) * 16u);
+}
+
+void scanout_margin_blips(bool on) {
+    margin_blips = on;
+    if (!on) {
+        memset(suffix, 0, sizeof(suffix));
+        memset(vblank_line, 0, sizeof(vblank_line));
+    }
+    rebuild_line_table(h_delay_words, v_back_porch);
+}
+
+static const uint32_t *blank_src(uint byte_off) {
+    const uint32_t *row = retrace_test ? vblank_line : blank_line;
+    return (const uint32_t *)((const uint8_t *)row + byte_off);
+}
+
 static void rebuild_line_table(uint8_t delay_words, uint8_t v_bp) {
     uint16_t h = scanout_height();
     uint8_t v_fp = (uint8_t)(mode_v_blank() - V_SYNC_LINES - v_bp);
     uint byte_off = H_PAD_BYTES - (uint)delay_words * 4u;
 
+    const uint32_t *porch = margin_blips
+        ? (const uint32_t *)((const uint8_t *)vblank_line + byte_off)
+        : blank_src(byte_off);
+
     for (int n = 0; n < v_bp; n++) {
-        line_ptrs[n] = (const uint32_t *)((const uint8_t *)blank_line + byte_off);
+        line_ptrs[n] = porch;
     }
     for (int y = 0; y < h; y++) {
         line_ptrs[v_bp + y] = (const uint32_t *)(frame_buffer[y] + byte_off);
     }
     const int tail = v_bp + h;
-    for (int n = 0; n < v_fp + V_SYNC_LINES; n++) {
-        line_ptrs[tail + n] = (const uint32_t *)((const uint8_t *)blank_line + byte_off);
+    for (int n = 0; n < v_fp; n++) {
+        line_ptrs[tail + n] = porch;
+    }
+    for (int n = 0; n < V_SYNC_LINES; n++) {
+        line_ptrs[tail + v_fp + n] = blank_src(byte_off);
     }
     const int used = tail + v_fp + V_SYNC_LINES;
     for (int n = used; n < LINES_MAX; n++) {
-        line_ptrs[n] = (const uint32_t *)((const uint8_t *)blank_line + byte_off);
+        line_ptrs[n] = blank_src(byte_off);
     }
+}
+
+static void apply_suffix(uint8_t delay_words) {
+    (void)delay_words;
+    suffix_reload_addr = (uint32_t)suffix;
+    dma_channel_set_read_addr(suffix_chan, suffix, false);
+    dma_channel_set_trans_count(suffix_chan, 0, false);
 }
 
 static void apply_timing(uint8_t delay_words, uint8_t v_bp) {
     rebuild_line_table(delay_words, v_bp);
     dma_channel_set_trans_count(data_chan, dma_words(delay_words), false);
+    apply_suffix(delay_words);
 }
 
 static void pio_rewind_irq(void) {
@@ -324,6 +415,33 @@ static void configure_dma(void) {
         false
     );
 
+    suffix_reload_addr = (uint32_t)suffix;
+    dma_channel_config c_suf = dma_channel_get_default_config(suffix_chan);
+    channel_config_set_transfer_data_size(&c_suf, DMA_SIZE_32);
+    channel_config_set_read_increment(&c_suf, false);
+    channel_config_set_write_increment(&c_suf, false);
+    dma_channel_configure(
+        suffix_chan,
+        &c_suf,
+        &dma_rx_dummy,
+        suffix,
+        1,
+        false
+    );
+
+    dma_channel_config c_reload = dma_channel_get_default_config(reload_chan);
+    channel_config_set_transfer_data_size(&c_reload, DMA_SIZE_32);
+    channel_config_set_read_increment(&c_reload, false);
+    channel_config_set_write_increment(&c_reload, false);
+    dma_channel_configure(
+        reload_chan,
+        &c_reload,
+        &dma_hw->ch[suffix_chan].read_addr,
+        &suffix_reload_addr,
+        1,
+        false
+    );
+
     dma_channel_config c_drain = dma_channel_get_default_config(drain_chan);
     channel_config_set_transfer_data_size(&c_drain, DMA_SIZE_32);
     channel_config_set_read_increment(&c_drain, false);
@@ -359,8 +477,12 @@ static void configure_dma(void) {
 static void abort_dma(void) {
     dma_channel_abort(kick_chan);
     dma_channel_abort(drain_chan);
+    dma_channel_abort(reload_chan);
+    dma_channel_abort(suffix_chan);
     dma_channel_abort(data_chan);
-    dma_hw->abort = (1u << (uint)kick_chan) | (1u << (uint)drain_chan) | (1u << (uint)data_chan);
+    dma_hw->abort = (1u << (uint)kick_chan) | (1u << (uint)drain_chan) |
+                    (1u << (uint)reload_chan) | (1u << (uint)suffix_chan) |
+                    (1u << (uint)data_chan);
     while (dma_hw->abort) {
         tight_loop_contents();
     }
@@ -408,6 +530,9 @@ void scanout_init(PIO pio) {
 
     memset(frame_buffer, 0, sizeof(frame_buffer));
     memset(blank_line, 0, sizeof(blank_line));
+    memset(vblank_line, 0, sizeof(vblank_line));
+    memset(suffix, 0, sizeof(suffix));
+    retrace_test = false;
     h_delay_words = 0;
     v_back_porch = V_BP_DEFAULT_60;
     video_mode = MODE_60_80;
@@ -431,6 +556,8 @@ void scanout_init(PIO pio) {
     irq_set_enabled(PIO0_IRQ_0, true);
 
     data_chan = dma_claim_unused_channel(true);
+    suffix_chan = dma_claim_unused_channel(true);
+    reload_chan = dma_claim_unused_channel(true);
     drain_chan = dma_claim_unused_channel(true);
     kick_chan = dma_claim_unused_channel(true);
     rebuild_line_table(0, V_BP_DEFAULT_60);
@@ -466,9 +593,9 @@ void scanout_reset_timing(void) {
 
 void scanout_print_status(const char *pat) {
     uint8_t v_fp = (uint8_t)(mode_v_blank() - V_SYNC_LINES - v_back_porch);
-    printf("crt-pattern %s %s %s hpad=%u vbp=%u vfp=%u vsize78=%u\n",
+    printf("crt-pattern %s %ux%u %s hpad=%u vbp=%u vfp=%u vsize78=%u\n",
            mode_78() ? "78Hz" : "60Hz",
-           mode_132() ? "132col" : "80col",
+           (unsigned)scanout_width(), (unsigned)scanout_height(),
            pat,
            (unsigned)h_delay_words * 16u, (unsigned)v_back_porch, (unsigned)v_fp,
            mode_78() ? 1u : 0u);

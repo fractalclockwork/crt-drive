@@ -10,6 +10,7 @@ The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberr
 
 | Doc | Role |
 | --- | --- |
+| [Project writeup](docs/project-writeup.md) | Methodology, hardware, software, HIL, camera on the glass |
 | [Hardware design](docs/hardware-design.md) | Board identity, labeled pads V0/V1/V/H/GND, level shift, 60 Hz then 78 Hz timings |
 | [Firmware plan](docs/firmware-plan.md) | Phased PIO / DMA / framebuffer build, open choices |
 | [Test patterns](docs/test-pattern-design.md) | `cross60` HIL record (keep); six 78 Hz drawings still on `APP=pattern` |

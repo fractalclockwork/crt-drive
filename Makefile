@@ -8,6 +8,7 @@
 	demos-build demos-flash demos-monitor demos-test \
 	cross60-build cross60-flash cross60-monitor cross60-test \
 	hello-build hello-flash hello-monitor hello-test \
+	camera camera-check \
 	serial serial-check term-serial demos-serial hello-serial
 
 APP ?= cross60
@@ -21,6 +22,8 @@ help:
 	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, hello"
 	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos   make test APP=hello"
 	@echo "  Aliases: pattern-*  term-*  demos-*  cross60-*  hello-*   (build, flash, monitor, test)"
+	@echo "  make camera           — live C310 view and framing-pattern overlay"
+	@echo "  make camera-check    — same view; exit 0 only when the raster is fully framed"
 	@echo "  make image / smoke / pico-discover / shell / shell-usb / picotool-info"
 	@echo "See docs/toolchains.md"
 
@@ -132,6 +135,13 @@ hello-monitor:
 
 hello-test:
 	$(MAKE) test APP=hello
+
+# Host-side. The C310 and the X11 view are not inside the Pico container.
+camera:
+	python3 tools/camera.py
+
+camera-check:
+	python3 tools/camera.py --check
 
 serial serial-check term-serial demos-serial hello-serial:
 	@echo "$(SERIAL_GONE)" >&2

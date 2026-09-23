@@ -45,19 +45,31 @@ file(
   "#endif\n"
 )
 
-add_subdirectory("${CRT_REPO_ROOT}/video" "${CMAKE_BINARY_DIR}/crt_video")
-
 add_executable(crt_term
     main.c
     screen.c
     font_7x10.c
     tty.c
+    "${CRT_REPO_ROOT}/video/scanout.c"
 )
+pico_generate_pio_header(crt_term "${CRT_REPO_ROOT}/video/video_pixel.pio")
+pico_generate_pio_header(crt_term "${CRT_REPO_ROOT}/video/hsync60.pio")
+pico_generate_pio_header(crt_term "${CRT_REPO_ROOT}/video/hsync60_132.pio")
+pico_generate_pio_header(crt_term "${CRT_REPO_ROOT}/video/vsync60.pio")
+pico_generate_pio_header(crt_term "${CRT_REPO_ROOT}/video/vsync.pio")
 target_include_directories(crt_term PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    "${CRT_REPO_ROOT}"
+    "${CRT_REPO_ROOT}/video"
 )
-target_link_libraries(crt_term crt_video)
+target_link_libraries(crt_term
+    pico_stdlib
+    hardware_pio
+    hardware_dma
+    hardware_clocks
+    hardware_irq
+)
 target_compile_definitions(crt_term PRIVATE PICO_STDIO_USB_CONNECT_WAIT_MS=5000)
 pico_enable_stdio_usb(crt_term 1)
 pico_enable_stdio_uart(crt_term 0)
