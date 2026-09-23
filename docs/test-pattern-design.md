@@ -49,29 +49,33 @@ Bezel **24.6 cm × 19.0 cm**. Factory Section 3: **11 mm ±2 mm** each side, bot
 
 **Analog order (decided).** Lock 60 Hz on the glass first (VR302, VR303, L201). Then switch `r` and fix 78 Hz in firmware. Do not reopen VR302/VR303/L201 for 78 Hz: VR303 is common, and VR302-min 60 Hz is already the factory 11 mm. A 12-line V-BP trim did **not** move a 3 cm top gap; extra VR303 with a short top ate the bottom (2.4 / 1.0 cm). Restoring 60 Hz analog restored 60 Hz and 78 Hz lost deflection again (3.5 / 1.6 cm at 338 lines).
 
-**Clock (decided).** Pico **PLL_SYS 128.4 MHz** for all four `cross60` modes so USB CDC stays up. Do not switch the PLL at runtime. Do not go back to a 48 MHz crystal story for this app.
+**Clock (decided).** Pico **PLL_SYS 128.4 MHz** for all four modes so USB CDC stays up. The horizontal program stays with the column count. Refresh is which vertical program is loaded. These are the factory counts in [hardware-design.md](hardware-design.md). A dense-line try (83.428 MHz, 2663 dots, 2080 × 476) is recorded below and is not this spec.
 
-| Mode | Dot clock | Line | Active | `/HSYNC` | `/VSYNC` | Grid cells | Boxes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 60 Hz | 83.428 MHz (clkdiv 394/256) | 2663 | **1968** × **504** | 294 FP / 289 sync / 0 BP | 8 FP / 6 sync / 5 BP (still 523 lines) | 40 × **24** | 49 × 21 |
-| 78 Hz | same 83.428 MHz | 2663 | **1968** × **416** | same H | 4 FP / 6 sync / 8 BP (434 lines, 72.2 Hz) | 40 × **26** | 52 × 16 |
+| Mode | Dot clock | Line | Active | `/HSYNC` | `/VSYNC` |
+| --- | --- | --- | --- | --- | --- |
+| 60 Hz 80-col | 32.1 MHz (clkdiv 4) | 1024 | 800 × 416 | 113 FP / 111 sync / 0 BP | 50 FP / 6 sync / 51 BP (523 lines, 59.938 Hz) |
+| 60 Hz 132-col | ~48 MHz (clkdiv 2.675) | 1530 | 1188 × 416 | 176 FP / 166 sync / 0 BP | same 523-line frame |
+| 78 Hz 80-col | same 32.1 MHz | 1024 | 800 × 377 | same H as 60 Hz 80-col | 11 FP / 6 sync / 8 BP (402 lines, ~77.94 Hz) |
+| 78 Hz 132-col | same ~48 MHz | 1530 | 1188 × 377 | same H as 60 Hz 132-col | same 402-line frame |
 
-Factory ceilings were 800 and 1188 dots at ~32 or ~48 MHz. This line is 2080 dots at the same ~31.33 kHz, so the box stays the size L201 already set. 2080 is the 2 bpp width that still links `term` and `demos`.
-
-Both refresh rates share that 2080-dot line, so `m` does not change the box. Factory 78 Hz 80-col was 800/1530 at 48 MHz and would shrink the box on this HIL.
-
-The pattern 78 Hz wrap is **434** lines (72.2 Hz). Width is **1968** dots so the 504-line 60 Hz buffer still links. Back porch stays 8. The right frame stroke is **3 dots**; a 1-dot stroke at `x = width - 1` dropped out and the edge jumped one cell. Term and demos keep this same 434-line wrap. The 377-line notes below are the earlier 402-line frame. The 2080 × 476 / 63.4 Hz try is the glass table below; it is not the running raster.
-
-**78 Hz margin blips** (crosshatch only, RCA edge marks). The 1968 × 416 frame stays the picture. Past it: 3-dot ticks every 32 dots, the first 33 dots to the right of the frame, and one center dash on each back-porch line (above) and front-porch line (below). A lit blip is still scanned. A missing one is in blanking. Sync lines stay black.
-
-**Glass, bezel lit, brightness and contrast at maximum** (C310, inner opening taken as 24.6 × 19.0 cm):
+**Dense-line try (not the spec).** One 2663-dot line at 83.428 MHz was built so both rates would share a sweep. On the glass, brightness and contrast at maximum, C310 scaled to the 24.6 × 19.0 cm opening:
 
 | Banner | Box | Left | Right | Top | Bottom |
 | --- | --- | --- | --- | --- | --- |
 | `78Hz 1968x416 crosshatch hpad=0 vbp=8 vfp=4` | 21.4 × 12.9 cm | 1.0 cm | 2.2 cm | 3.3 cm | 2.8 cm |
 | `78Hz 2080x476 crosshatch hpad=0 vbp=8 vfp=4` | 22.7 × 14.8 cm | 1.0 cm | 0.9 cm | 2.4 cm | 1.8 cm |
 
-The top line is present at `vbp=8`. 2080 × 476 is the pattern SRAM ceiling (a few hundred bytes under `0x20040000`). Pattern 60 Hz is 476 lines in the 523-line frame. Frame: [glass/78Hz-2080x476.jpg](glass/78Hz-2080x476.jpg).
+Frame: [glass/78Hz-2080x476.jpg](glass/78Hz-2080x476.jpg). SRAM stopped the step at 2080 × 476. The stars at that dot clock smeared, and the factory line was put back.
+
+**Pixel-code probe (factory line, not a new spec).** Drawing on `crt-pattern`: each lit dot is a nibble of its scan line and its 100-dot group. Dot 0 is the first dot after `/HSYNC` rises. Line 0 is the first line after `/VSYNC` rises. Picture groups light every eighth line. The group that starts at dot 800, and every group on a porch or sync line, lights every line. On the 1024-dot line the DMA for this drawing is 1008 dots, so the code occupies the front porch and the start of the sync pulse. Active picture width stays 800. Daylight stills, pots untouched:
+
+- Both rates, factory horizontal. The front-porch bar at dot 868 is on the glass. The next group starts at dot 900; its bar is dot 969, inside the 111-dot `/HSYNC`. Those diagonals stop before the right bezel. Dots 996–1023 are held black.
+- 60 Hz was also run once as 509 active lines (`vbp=4`, `vfp=4`) inside the factory 523-line frame. That probe filled the lit raster to the top and the bottom. The pattern image is back on factory 416 / `vbp=51` / `vfp=50`.
+- 78 Hz stayed factory: 377 active, `vbp=8`, `vfp=11`. The 11 front-porch lines light as a band under the picture. The 8 back-porch lines stay dark. The 6-line `/VSYNC` is not a second band.
+
+Porch video that reaches the phosphor is a blanking note. The active counts in the factory table stay the spec. Narrative: [project-writeup.md](project-writeup.md).
+
+**Camera on the glass.** `make camera-check` is the live reading ([project-writeup.md](project-writeup.md)). The C310 scores the dark face and the green phosphor in camera pixels before a still is trusted. Daylight moves that split, so a daytime pass only confirms the tube is in frame. The edge readings — the ones that walk the lit box outward — are taken at night in a dark room, brightness and contrast at maximum. The chassis blanking circuit holds the beam off in the dark border around the raster. A pixel written there does not light. The pixel-code stills above were daylight, so they name which dots lit, and they are not a millimeter table.
 
 **Packing (decided).** 2 bpp MSB-first, 32-bit LE DMA, PIO shift-left: `set_pixel` stores at `(x/4) ^ 3`. An 80 px grid hid the swap (lines at `x % 16 == 0`). A 40 px grid showed repeating **24 then 56** px pairs. Do not add a second vertical at `x = width-1` on top of the box (that made the last 80-col cell 79 px). Interior grid starts at one cell in; the bold box owns the raster edges.
 

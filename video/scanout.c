@@ -30,12 +30,22 @@
 
 #define WIDTH_80        800
 #define WIDTH_132       1188
+#ifndef CRT_HEIGHT_60
 #define HEIGHT_60       416                 /* 26 × 16 */
+#else
+#define HEIGHT_60       CRT_HEIGHT_60
+#endif
 #define HEIGHT_78       377                 /* 13 × 29 */
-#define FB_HEIGHT       HEIGHT_60
+/* Longest frame. 78 Hz uses the first 402 lines. Porch lines live here so a
+ * code can be clocked in vertical blanking without a second DMA. */
+#define FB_HEIGHT       V_LINES_60
 #define V_SYNC_LINES    6
 #define V_LINES_60      523
+#ifndef CRT_VBLANK_60
 #define V_BLANK_60      107                 /* 50 FP + 6 sync + 51 BP */
+#else
+#define V_BLANK_60      CRT_VBLANK_60
+#endif
 #define V_BLANK_78      25                  /* 11 FP + 6 sync + 8 BP; 402-line frame */
 #define LINES_MAX       V_LINES_60
 #define CELL_W_80       40
@@ -57,8 +67,13 @@
 #define DMA_BYTES_132   304                 /* 300 store + 4 off */
 _Static_assert(DMA_BYTES_80 / 4 * 16 < 1024, "80-col DMA fits the 1024-dot line");
 _Static_assert(DMA_BYTES_132 / 4 * 16 < 1530, "132-col DMA fits the 1530-dot line");
+_Static_assert(HEIGHT_60 + V_BLANK_60 == V_LINES_60, "60 Hz active + blank is one 523-line frame");
 #define H_DELAY_MAX     H_PAD_WORDS
+#ifndef CRT_VBP_60
 #define V_BP_DEFAULT_60 51
+#else
+#define V_BP_DEFAULT_60 CRT_VBP_60
+#endif
 #define V_BP_DEFAULT_78 8
 #define V_BP_MIN        1
 /* Kept for the retrace-mark API. Not chained onto the factory line. */
@@ -81,6 +96,7 @@ static int kick_chan;
 static uint32_t suffix_reload_addr;
 static bool retrace_test;
 static bool margin_blips;
+static bool code_blanking;
 
 static PIO pio_crt;
 static uint offset_pixel;
@@ -123,6 +139,11 @@ static float mode_clkdiv(void) {
 }
 
 static uint dma_words(uint8_t delay_words) {
+    /* 63 words = 1008 dots on the 1024-dot line. The last 16 dots stall black
+     * so the transfer finishes before the next line is kicked. */
+    if (code_blanking && !mode_132()) {
+        return 63;
+    }
     return delay_words + mode_dma_bytes() / 4;
 }
 
@@ -156,6 +177,28 @@ uint16_t scanout_height(void) {
     return mode_78() ? HEIGHT_78 : HEIGHT_60;
 }
 
+uint16_t scanout_signal_width(void) {
+    return mode_132() ? WIDTH_132 : 1008;
+}
+
+uint16_t scanout_frame_lines(void) {
+    return mode_78() ? (uint16_t)(HEIGHT_78 + V_BLANK_78) : (uint16_t)V_LINES_60;
+}
+
+uint16_t scanout_beam_line(void) {
+    uint32_t addr = dma_channel_hw_addr((uint)kick_chan)->read_addr;
+    uint32_t base = (uint32_t)line_ptrs;
+
+    if (addr <= base) {
+        return 0;
+    }
+    uint32_t next = (addr - base) / sizeof(uint32_t);
+    if (next > LINES_MAX) {
+        next = LINES_MAX;
+    }
+    return (uint16_t)(next - 1u);
+}
+
 uint16_t scanout_cell_w(void) {
     return mode_132() ? CELL_W_132 : CELL_W_80;
 }
@@ -172,17 +215,32 @@ uint16_t scanout_char_h(void) {
     return mode_78() ? CHAR_H_78 : CHAR_H_60;
 }
 
+static void write_pixel(uint8_t *row, uint16_t x, PixelColor color) {
+    uint16_t byte_idx = (uint16_t)((x / 4) ^ 3);
+    uint8_t shift = (uint8_t)((3 - (x % 4)) * 2);
+
+    row[byte_idx] &= (uint8_t)~(0b11 << shift);
+    row[byte_idx] |= (uint8_t)((color & 0b11) << shift);
+}
+
 void scanout_set_pixel(uint16_t x, uint16_t y, PixelColor color) {
     if (x >= scanout_width() || y >= scanout_height()) {
         return;
     }
+    write_pixel(pixel_base(y), x, color);
+}
 
-    uint16_t byte_idx = (uint16_t)((x / 4) ^ 3);
-    uint8_t shift = (uint8_t)((3 - (x % 4)) * 2);
-    uint8_t *row = pixel_base(y);
+void scanout_set_frame_pixel(uint16_t line, uint16_t x, PixelColor color) {
+    if (line >= FB_HEIGHT || x >= scanout_signal_width()) {
+        return;
+    }
+    write_pixel(pixel_base(line), x, color);
+}
 
-    row[byte_idx] &= (uint8_t)~(0b11 << shift);
-    row[byte_idx] |= (uint8_t)((color & 0b11) << shift);
+void scanout_code_blanking(bool on) {
+    code_blanking = on;
+    rebuild_line_table(h_delay_words, v_back_porch);
+    dma_channel_set_trans_count(data_chan, dma_words(h_delay_words), false);
 }
 
 void scanout_clear(PixelColor color) {
@@ -282,6 +340,18 @@ static void rebuild_line_table(uint8_t delay_words, uint8_t v_bp) {
     uint16_t h = scanout_height();
     uint8_t v_fp = (uint8_t)(mode_v_blank() - V_SYNC_LINES - v_bp);
     uint byte_off = H_PAD_BYTES - (uint)delay_words * 4u;
+
+    if (code_blanking) {
+        uint16_t nlines = scanout_frame_lines();
+        for (int n = 0; n < LINES_MAX; n++) {
+            if (n < (int)nlines) {
+                line_ptrs[n] = (const uint32_t *)(frame_buffer[n] + byte_off);
+            } else {
+                line_ptrs[n] = blank_src(byte_off);
+            }
+        }
+        return;
+    }
 
     const uint32_t *porch = margin_blips
         ? (const uint32_t *)((const uint8_t *)vblank_line + byte_off)
@@ -395,9 +465,33 @@ static void configure_pio_sms(void) {
     pio_sm_init(pio, SM_VSYNC, offset_vsync, &c_vsync);
     pio_sm_exec(pio, SM_VSYNC, pio_encode_set(pio_pins, 1));
 
-    pio_sm_clear_fifos(pio, SM_PIXEL);
     pio_sm_clear_fifos(pio, SM_HSYNC);
     pio_sm_clear_fifos(pio, SM_VSYNC);
+}
+
+/* FJOIN_TX is set on the pixel SM. pio_sm_clear_fifos toggles FJOIN_RX,
+ * and both join bits set at once leaves the TX FIFO unable to drain.
+ * out then stalls with the pins held at the forced black written above. */
+static void flush_pixel_fifo(PIO pio) {
+    uint32_t shift = pio->sm[SM_PIXEL].shiftctrl;
+
+    hw_clear_bits(&pio->sm[SM_PIXEL].shiftctrl,
+                  PIO_SM0_SHIFTCTRL_FJOIN_TX_BITS | PIO_SM0_SHIFTCTRL_AUTOPULL_BITS);
+    pio_sm_restart(pio, SM_PIXEL);
+    hw_xor_bits(&pio->sm[SM_PIXEL].shiftctrl, PIO_SM0_SHIFTCTRL_FJOIN_RX_BITS);
+    hw_xor_bits(&pio->sm[SM_PIXEL].shiftctrl, PIO_SM0_SHIFTCTRL_FJOIN_RX_BITS);
+    pio->sm[SM_PIXEL].shiftctrl = shift;
+    pio_sm_restart(pio, SM_PIXEL);
+}
+
+/* Last instruction written to each SM. pio_sm_init's jmp is not blocking,
+ * and a later exec replaces it. Restart clears a latched jmp, so this
+ * jump is not followed by another restart. */
+static void jump_sm(PIO pio, uint sm, uint pc) {
+    pio_sm_exec(pio, sm, pio_encode_jmp(pc));
+    for (uint32_t n = 0; n < 256u && pio_sm_is_exec_stalled(pio, sm); n++) {
+        tight_loop_contents();
+    }
 }
 
 static void configure_dma(void) {
@@ -474,18 +568,22 @@ static void configure_dma(void) {
     dma_channel_start(drain_chan);
 }
 
+static void clear_pio_irqs(void) {
+    pio_interrupt_clear(pio_crt, 0);
+    pio_interrupt_clear(pio_crt, 1);
+    pio_interrupt_clear(pio_crt, 2);
+    pio_interrupt_clear(pio_crt, 3);
+}
+
+/* dma_channel_abort already waits until BUSY drops. Writing abort again
+ * sticks on an idle channel (RP2040-E13): the bit never clears, and
+ * scanout_set_mode stays here with the state machines disabled. */
 static void abort_dma(void) {
     dma_channel_abort(kick_chan);
     dma_channel_abort(drain_chan);
     dma_channel_abort(reload_chan);
     dma_channel_abort(suffix_chan);
     dma_channel_abort(data_chan);
-    dma_hw->abort = (1u << (uint)kick_chan) | (1u << (uint)drain_chan) |
-                    (1u << (uint)reload_chan) | (1u << (uint)suffix_chan) |
-                    (1u << (uint)data_chan);
-    while (dma_hw->abort) {
-        tight_loop_contents();
-    }
 }
 
 void scanout_enable(bool on) {
@@ -500,8 +598,14 @@ void scanout_enable(bool on) {
 void scanout_set_mode(VideoMode mode) {
     irq_set_enabled(PIO0_IRQ_0, false);
     scanout_enable(false);
+    /* Release an hsync that was stopped inside `irq` with the flag still
+     * set. Restart does not clear PIO IRQ flags, and a stalled SM ignores
+     * the jmp that pio_sm_init uses to put the PC back at the wrap. */
+    clear_pio_irqs();
+    pio_sm_restart(pio_crt, SM_PIXEL);
+    pio_sm_restart(pio_crt, SM_HSYNC);
+    pio_sm_restart(pio_crt, SM_VSYNC);
     abort_dma();
-    pio_interrupt_clear(pio_crt, PIO_IRQ_REWIND);
 
     bool hz_change = mode_78() != (mode == MODE_78_80 || mode == MODE_78_132);
 
@@ -517,8 +621,25 @@ void scanout_set_mode(VideoMode mode) {
     apply_timing(h_delay_words, v_back_porch);
     configure_dma();
 
-    irq_set_enabled(PIO0_IRQ_0, true);
+    clear_pio_irqs();
+    flush_pixel_fifo(pio_crt);
+    pio_sm_put(pio_crt, SM_PIXEL, 0);
+    jump_sm(pio_crt, SM_PIXEL, offset_pixel);
+    jump_sm(pio_crt, SM_HSYNC, offset_hsync);
+    jump_sm(pio_crt, SM_VSYNC, offset_vsync);
+    clear_pio_irqs();
     scanout_enable(true);
+    irq_set_enabled(PIO0_IRQ_0, true);
+}
+
+void scanout_sm_instr(uint16_t instr[3]) {
+    instr[0] = (uint16_t)pio_crt->sm[SM_PIXEL].instr;
+    instr[1] = (uint16_t)pio_crt->sm[SM_HSYNC].instr;
+    instr[2] = (uint16_t)pio_crt->sm[SM_VSYNC].instr;
+}
+
+void scanout_reset_pio(void) {
+    scanout_set_mode(video_mode);
 }
 
 void scanout_init(PIO pio) {

@@ -209,3 +209,35 @@ float font_line_height(void) {
     font_update_scale();
     return (float)(ascent - descent + line_gap) * y_scale;
 }
+
+static int font_h_box(int *y0, int *y1) {
+    int x0;
+    int x1;
+    if (!font_ready) {
+        return 0;
+    }
+    font_update_scale();
+    stbtt_GetCodepointBitmapBoxSubpixel(&font_info, 'H', x_scale, y_scale, 0.0f, 0.0f,
+                                        &x0, y0, &x1, y1);
+    (void)x0;
+    (void)x1;
+    return 1;
+}
+
+int font_cap_height(void) {
+    int y0;
+    int y1;
+    if (!font_h_box(&y0, &y1)) {
+        return 0;
+    }
+    return y1 - y0;
+}
+
+int font_cap_ascent(void) {
+    int y0;
+    int y1;
+    if (!font_h_box(&y0, &y1)) {
+        return 0;
+    }
+    return -y0;
+}

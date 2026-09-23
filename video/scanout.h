@@ -27,6 +27,11 @@ typedef enum {
 
 void scanout_init(PIO pio);
 void scanout_set_mode(VideoMode mode);
+/* Stop the state machines, reload the current mode's PIO programs, and
+ * start them again. Same path as a mode change, without changing the mode. */
+void scanout_reset_pio(void);
+/* Instruction currently addressed by each scanout state machine. */
+void scanout_sm_instr(uint16_t instr[3]);
 void scanout_enable(bool on);
 
 VideoMode scanout_mode(void);
@@ -40,6 +45,18 @@ uint16_t scanout_char_w(void);
 uint16_t scanout_char_h(void);
 
 void scanout_set_pixel(uint16_t x, uint16_t y, PixelColor color);
+/* Whole frame, including the vertical porch and sync. x may run into the
+ * horizontal porch (scanout_signal_width) on 80-col. */
+uint16_t scanout_signal_width(void);
+uint16_t scanout_frame_lines(void);
+/* Line the pixel DMA just started (0 .. frame_lines-1), including porch.
+ * Hsync pushes at the start of the line; the kick channel then loads that
+ * line and its read pointer advances. Active picture y is
+ * beam - scanout_vbp() while beam is inside the active window. */
+uint16_t scanout_beam_line(void);
+void scanout_set_frame_pixel(uint16_t line, uint16_t x, PixelColor color);
+/* Show frame_buffer[line] on that scan line, and clock the horizontal porch. */
+void scanout_code_blanking(bool on);
 void scanout_clear(PixelColor color);
 void scanout_fill_line(uint16_t y, PixelColor color);
 void scanout_scroll(uint16_t lines);

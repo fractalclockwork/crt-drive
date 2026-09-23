@@ -15,9 +15,23 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
+add_custom_command(
+  OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/noto_sans_regular.c"
+  COMMAND python3 "${CRT_REPO_ROOT}/tools/ttf_to_c.py"
+          "${CRT_REPO_ROOT}/font/fonts/NotoSans-Regular.ttf"
+          "${CMAKE_CURRENT_BINARY_DIR}/noto_sans_regular.c"
+          font_noto_sans_regular
+  DEPENDS
+    "${CRT_REPO_ROOT}/tools/ttf_to_c.py"
+    "${CRT_REPO_ROOT}/font/fonts/NotoSans-Regular.ttf"
+  VERBATIM
+)
+
 add_executable(crt_pattern
     main.c
     "${CRT_REPO_ROOT}/video/scanout.c"
+    "${CRT_REPO_ROOT}/font/font.c"
+    "${CMAKE_CURRENT_BINARY_DIR}/noto_sans_regular.c"
 )
 pico_generate_pio_header(crt_pattern "${CRT_REPO_ROOT}/video/video_pixel.pio")
 pico_generate_pio_header(crt_pattern "${CRT_REPO_ROOT}/video/hsync60.pio")
@@ -27,6 +41,7 @@ pico_generate_pio_header(crt_pattern "${CRT_REPO_ROOT}/video/vsync.pio")
 target_include_directories(crt_pattern PRIVATE
     "${CRT_REPO_ROOT}"
     "${CRT_REPO_ROOT}/video"
+    "${CRT_REPO_ROOT}/font"
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 target_link_libraries(crt_pattern

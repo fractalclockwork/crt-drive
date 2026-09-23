@@ -6,6 +6,7 @@
 	pattern-build pattern-flash pattern-monitor pattern-test \
 	term-build term-flash term-monitor term-test \
 	demos-build demos-flash demos-monitor demos-test \
+	beam-build beam-flash beam-monitor beam-test \
 	cross60-build cross60-flash cross60-monitor cross60-test \
 	hello-build hello-flash hello-monitor hello-test \
 	camera camera-check \
@@ -19,9 +20,9 @@ help:
 	@echo "crt-drive RP2040 toolchain (Docker on this Dev-Host)"
 	@echo "  Verbs (default APP=cross60 → apps/cross60, crt_cross60):"
 	@echo "    make build / rebuild / flash / test"
-	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, hello"
-	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos   make test APP=hello"
-	@echo "  Aliases: pattern-*  term-*  demos-*  cross60-*  hello-*   (build, flash, monitor, test)"
+	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, beam, hello"
+	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos | APP=beam   make test APP=hello"
+	@echo "  Aliases: pattern-*  term-*  demos-*  beam-*  cross60-*  hello-*   (build, flash, monitor, test)"
 	@echo "  make camera           — live C310 view and framing-pattern overlay"
 	@echo "  make camera-check    — same view; exit 0 only when the raster is fully framed"
 	@echo "  make image / smoke / pico-discover / shell / shell-usb / picotool-info"
@@ -111,6 +112,18 @@ demos-monitor:
 
 demos-test:
 	$(MAKE) test APP=demos
+
+beam-build:
+	$(MAKE) build APP=beam
+
+beam-flash:
+	$(MAKE) flash APP=beam
+
+beam-monitor:
+	$(MAKE) monitor APP=beam
+
+beam-test:
+	$(MAKE) test APP=beam
 
 cross60-build:
 	$(MAKE) build APP=cross60

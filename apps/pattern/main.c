@@ -7,9 +7,20 @@
 #include "hardware/structs/sio.h"
 
 #include "scanout.h"
+#include "font.h"
 #include "assets/indian_head/indian_head_pattern.h"
 
-#define PATTERN_COUNT       6
+#define PATTERN_COUNT       7
+/* Pixel-code. Keep in lockstep with tools/glass_code.py.
+ * A group is five 20-dot columns. The dot's place in its column is a nibble:
+ * line[3:0], line[7:4], line[11:8], group, parity. Picture groups are staggered
+ * so a column is dark for 7 lines and the dot does not stack into a bar.
+ * Groups that start at or past the active width, and every group on a vertical
+ * porch or sync line, are drawn on every line — the blanking-interval code. */
+#define CODE_COL_W          20
+#define CODE_NIBBLES        5
+#define CODE_GROUP_W        (CODE_NIBBLES * CODE_COL_W)
+#define CODE_STRIDE         8
 #define BOOTSEL_POLL_US     10000
 #define BOOTSEL_DEBOUNCE_MS 50
 #define BANNER_MS           250
@@ -28,6 +39,9 @@
 #define IH_BURST_X          632
 #define IH_BURST_W          160
 #define IH_BURST_Y          56
+/* Cap height of the standby line, in millimeters on the measured fill. */
+#define STANDBY_CAP_MM      13.5f
+#define STANDBY_TEXT        "PLEASE STAND BY"
 #define CHAR_ROWS           26
 #define GLYPH_WIDTH         7
 #define GLYPH_HEIGHT        10
@@ -40,7 +54,8 @@ typedef enum {
     PATTERN_FOCUS,
     PATTERN_INDIAN_HEAD,
     PATTERN_FULL_ON,
-    PATTERN_SYNC_SQUARES
+    PATTERN_SYNC_SQUARES,
+    PATTERN_PIXEL_CODE
 } PatternId;
 
 static const char *pattern_name = "sync-squares";
@@ -132,11 +147,69 @@ static void generate_monte_carlo(void) {
             scanout_set_pixel((uint16_t)(x + jx), (uint16_t)(y + jy), PIXEL_BOLD);
         }
     }
+    for (uint16_t x = 8; x < w; x = (uint16_t)(x + step * 3u)) {
+        scanout_set_pixel(x, 0, PIXEL_BOLD);
+        scanout_set_pixel(x, (uint16_t)(h - 1), PIXEL_BOLD);
+    }
     printf("monte carlo %ux%u  1-dot stars\n", (unsigned)w, (unsigned)h);
 }
 
 void generate_crosshatch_pattern(void) {
     generate_monte_carlo();
+}
+
+static uint8_t code_nibble(uint16_t line, uint16_t group, int n) {
+    uint8_t a = (uint8_t)(line & 15u);
+    uint8_t b = (uint8_t)((line >> 4) & 15u);
+    uint8_t c = (uint8_t)((line >> 8) & 15u);
+    uint8_t d = (uint8_t)(group & 15u);
+
+    switch (n) {
+    case 0:
+        return a;
+    case 1:
+        return b;
+    case 2:
+        return c;
+    case 3:
+        return d;
+    default:
+        return (uint8_t)(a ^ b ^ c ^ d);
+    }
+}
+
+static int code_emit_group(uint16_t line, uint16_t group, uint16_t x0,
+                           uint16_t active0, uint16_t active1, uint16_t picture_x) {
+    if (line < active0 || line >= active1 || x0 >= picture_x) {
+        return 1;
+    }
+    return (line % CODE_STRIDE) == (group % CODE_STRIDE);
+}
+
+static void generate_pixel_code(void) {
+    uint16_t picture_x = scanout_width();
+    uint16_t signal_w = scanout_signal_width();
+    uint16_t nlines = scanout_frame_lines();
+    uint16_t active0 = scanout_vbp();
+    uint16_t active1 = (uint16_t)(active0 + scanout_height());
+    uint16_t groups = (uint16_t)(signal_w / CODE_GROUP_W);
+
+    scanout_clear(PIXEL_OFF);
+    scanout_code_blanking(true);
+    for (uint16_t line = 0; line < nlines; line++) {
+        for (uint16_t group = 0; group < groups; group++) {
+            uint16_t x0 = (uint16_t)(group * CODE_GROUP_W);
+            if (!code_emit_group(line, group, x0, active0, active1, picture_x)) {
+                continue;
+            }
+            for (int n = 0; n < CODE_NIBBLES; n++) {
+                uint16_t x = (uint16_t)(x0 + n * CODE_COL_W + code_nibble(line, group, n));
+                scanout_set_frame_pixel(line, x, PIXEL_BOLD);
+            }
+        }
+    }
+    printf("pixel-code frame %u  signal %u  groups %u  stride %u\n",
+           (unsigned)nlines, (unsigned)signal_w, (unsigned)groups, CODE_STRIDE);
 }
 
 void generate_intensity_bars(void) {
@@ -218,6 +291,67 @@ static void pack_pixel(uint8_t *row, uint16_t x, PixelColor color) {
     row[byte_idx] |= (uint8_t)((color & 0b11) << shift);
 }
 
+static float mm_to_px_x(float mm) {
+    uint16_t fill_mm = scanout_mode_78() ? 226 : 225;
+    return mm * (float)scanout_width() / (float)fill_mm;
+}
+
+static float mm_to_px_y(float mm) {
+    uint16_t fill_mm = scanout_mode_78() ? 157 : 170;
+    return mm * (float)scanout_height() / (float)fill_mm;
+}
+
+/* Probe at 32 px, then scale so capital H is `mm` tall on the glass. */
+static void font_set_cap_mm(float mm) {
+    font_set_size(32.0f);
+    int cap = font_cap_height();
+    if (cap < 1) {
+        return;
+    }
+    font_set_size(32.0f * mm_to_px_y(mm) / (float)cap);
+}
+
+static void fill_rect(int x0, int y0, int x1, int y1, PixelColor color) {
+    int w = scanout_width();
+    int h = scanout_height();
+    if (x0 < 0) {
+        x0 = 0;
+    }
+    if (y0 < 0) {
+        y0 = 0;
+    }
+    if (x1 > w) {
+        x1 = w;
+    }
+    if (y1 > h) {
+        y1 = h;
+    }
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            scanout_set_pixel((uint16_t)x, (uint16_t)y, color);
+        }
+    }
+}
+
+/* Capitals centered on the active raster, on a dark band so they read on the portrait. */
+static void overlay_standby(void) {
+    font_set_cap_mm(STANDBY_CAP_MM);
+    int cap = font_cap_height();
+    int ascent = font_cap_ascent();
+    if (cap < 1) {
+        return;
+    }
+    int tw = font_text_width(STANDBY_TEXT);
+    int w = scanout_width();
+    int h = scanout_height();
+    int x = (w - tw) / 2;
+    int top = (h - cap) / 2;
+    int pad_x = (int)(mm_to_px_x(2.0f) + 0.5f);
+    int pad_y = (int)(mm_to_px_y(1.5f) + 0.5f);
+    fill_rect(x - pad_x, top - pad_y, x + tw + pad_x, top + cap + pad_y, PIXEL_OFF);
+    font_draw_utf8(x, top + ascent, STANDBY_TEXT, PIXEL_BOLD);
+}
+
 /* Three levels in the /HSYNC window. A leak is vertical bars, not the card. */
 static PixelColor retrace_bar(uint16_t x) {
     if (x < 80) {
@@ -252,6 +386,7 @@ void generate_indian_head_pattern(void) {
             scanout_set_pixel((uint16_t)(ox + x), y, ih_pixel(src, sx));
         }
     }
+    overlay_standby();
 
     /* Outside the frame: vertical bars during /HSYNC, horizontal bursts on
      * the vertical porch and sync. Both stay dark if blanking holds. */
@@ -297,6 +432,7 @@ static bool __no_inline_not_in_flash_func(get_bootsel_button)(void) {
 static void apply_pattern(PatternId id) {
     scanout_retrace_test(false);
     scanout_margin_blips(false);
+    scanout_code_blanking(false);
     current_pattern = id;
     switch (id) {
     case PATTERN_INTENSITY:
@@ -318,6 +454,10 @@ static void apply_pattern(PatternId id) {
     case PATTERN_SYNC_SQUARES:
         generate_sync_squares_pattern();
         pattern_name = "sync-squares";
+        break;
+    case PATTERN_PIXEL_CODE:
+        generate_pixel_code();
+        pattern_name = "pixel-code";
         break;
     case PATTERN_CROSSHATCH:
     default:
@@ -387,7 +527,8 @@ static void apply_mode(VideoMode mode) {
 
 static void print_pattern_help(void) {
     printf("crt-pattern: BOOTSEL cycles  1/c crosshatch  2/i intensity  3/f focus\n");
-    printf("  4/n indian-head  5/o full-on  6 sync-squares  r 60/78\n");
+    printf("  4/n indian-head  5/o full-on  6 sync-squares  7/g pixel-code\n");
+    printf("  r 60/78\n");
     printf("  raster %u x %u  (factory max 1188 x 416)\n",
            (unsigned)scanout_width(), (unsigned)scanout_height());
     printf("  a/d H 16px  A/D 64px  w/s V 1 line  W/S 5 lines  0 reset  ? help\n");
@@ -402,7 +543,8 @@ int main(void) {
 
     scanout_init(pio0);
     stdio_init_all();
-    apply_pattern(PATTERN_CROSSHATCH);
+    font_init();
+    apply_pattern(PATTERN_PIXEL_CODE);
     print_pattern_help();
 
     absolute_time_t next_banner = make_timeout_time_ms(BANNER_MS);
@@ -439,6 +581,11 @@ int main(void) {
                 break;
             case '6':
                 apply_pattern(PATTERN_SYNC_SQUARES);
+                break;
+            case '7':
+            case 'g':
+            case 'G':
+                apply_pattern(PATTERN_PIXEL_CODE);
                 break;
             case 'm':
             case 'M':

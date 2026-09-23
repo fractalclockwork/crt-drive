@@ -58,6 +58,8 @@ ifeq ($(APP),term)
   CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DTERM_IMAGE_ID=$(IMAGE_ID),)
 else ifeq ($(APP),demos)
   CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DDEMO_IMAGE_ID=$(IMAGE_ID),)
+else ifeq ($(APP),beam)
+  CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DBEAM_IMAGE_ID=$(IMAGE_ID),)
 else
   CMAKE_IMAGE_ID :=
 endif
@@ -84,7 +86,7 @@ help:
 	@echo "  make flash          — picotool load $(UF2)"
 	@echo "  make monitor        — USB CDC; omit APP to follow the running firmware banner"
 	@echo "  make test           — unique digest + flash + HIL (APP=cross60 default; APP=hello for bring-up)"
-	@echo "  make APP=pattern|term|demos build / flash / test"
+	@echo "  make APP=pattern|term|demos|beam build / flash / test"
 	@echo "  make smoke / build-images / pico-discover / shell / shell-usb / picotool-info"
 	@echo "  PICO_BOARD=$(PICO_BOARD)  APP=$(APP)  CMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE)"
 	@echo "See ../docs/toolchains.md"
@@ -120,6 +122,7 @@ else
 		$(if $(strip $(IMAGE_ID)),-e IMAGE_ID="$(IMAGE_ID)",) \
 		$(if $(filter term,$(APP)),-e TERM_IMAGE_ID="$(IMAGE_ID)",) \
 		$(if $(filter demos,$(APP)),-e DEMO_IMAGE_ID="$(IMAGE_ID)",) \
+		$(if $(filter beam,$(APP)),-e BEAM_IMAGE_ID="$(IMAGE_ID)",) \
 		pico-dev bash -lc 'set -euo pipefail; cmake -S $(APP_SRC) -B $(APP_BUILD) -GNinja -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) -DPICO_BOARD=$(PICO_BOARD) $(CMAKE_IMAGE_ID); ninja -C $(APP_BUILD) $(APP_TARGET)'
 endif
 

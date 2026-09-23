@@ -1,6 +1,6 @@
 # Dev-Host Pico SDK container
 
-RP2040 firmware is built inside Docker **on this machine**. There is no Raspberry Pi hardware gateway: plug the Pico into the Dev-Host USB port for `picotool` and USB CDC serial.
+Edit, Git, and Make run on the Dev-Host. pico-dev is called into from that host only; the container is the compiler and `picotool`, not the editor. There is no Raspberry Pi hardware gateway: plug the Pico into the Dev-Host USB port for `picotool` and USB CDC serial.
 
 The image follows [fractalclockwork/cede](https://github.com/fractalclockwork/cede) `lab/docker/pico-dev` (Pico only — no Arduino, orchestration, or Pi-gateway services).
 
@@ -53,8 +53,8 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 |---------|----------------|
 | `make image` | Build/refresh `crt-drive/pico-dev:local` for this CPU (`linux/amd64` or `linux/arm64`) |
 | `make smoke` | Toolchain check inside the image (no board) |
-| `make shell` | Interactive bash; repo at `/workspace`; `PICO_SDK_PATH` set |
-| `make shell-usb` | Same, privileged, host `/dev` for picotool and ACM |
+| `make shell` | Call into the image (repo at `/workspace`, `PICO_SDK_PATH` set). `exit` returns to the Dev-Host |
+| `make shell-usb` | Same call-in, privileged, host `/dev` for picotool and ACM. `exit` returns to the Dev-Host |
 | `make pico-discover` | Host `lsusb` / `/dev/serial/by-id` / tty; skip picotool unless BOOTSEL |
 | `make hello-test` | Alias for `make test APP=hello`: build, flash, USB ping `hello_pico` (unique `digest=`) |
 | `make hello-build` / `hello-flash` / `hello-monitor` | Steps of `hello-test` |
@@ -67,15 +67,16 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make build APP=term` / `flash` / `test` | Glass TTY ([`apps/term`](../apps/term/) → `build/term/crt_term.uf2`) |
 | `make term-build` / `term-flash` / `term-monitor` / `term-test` | Aliases for the term app |
 | `make build APP=demos` / `flash` / `test` | Phosphor reel, four-mode scanout ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
+| `make build APP=beam` / `flash` / `test` | Beam-line update tests ([`apps/beam`](../apps/beam/) → `build/beam/crt_beam.uf2`). CDC `?` must show `line=` and `then=` differ |
 | `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
 | `make build APP=cross60` / `flash` / `test` | Same as default; 60 Hz 1-pixel plus |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |
-| `make camera` | Live Logitech C310 view on this host (not in the Pico container). Selects crosshatch on `crt-pattern`, or the measure box on `crt-cross60`, and overlays whether that raster is fully framed |
-| `make camera-check` | Same view. Exits 0 only after the raster stays fully inside the picture. Every camera HIL starts here |
+| `make camera` | Live Logitech C310 view on this host (not in the Pico container). Selects crosshatch on `crt-pattern`, or the measure box on `crt-cross60`. Overlay: yellow glass, green phosphor, both in camera pixels |
+| `make camera-check` | Same view. Exits 0 only after the raster stays fully inside the picture for one second. Every camera HIL starts here. Edge readings against the blanking border are a dark-room session; see [project-writeup.md](project-writeup.md) |
 
 Build artifacts land on the bind mount (`hello_pico/build/`, `build/<app>/`), owned as your uid for non-USB `compose run`.
 
-Overrides: `PICO_BOARD=pico` (or `pico_w`), `APP=cross60` (or `pattern`, `term`, `demos`, `hello`), `CMAKE_BUILD_TYPE=Release`, `IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
+Overrides: `PICO_BOARD=pico` (or `pico_w`), `APP=cross60` (or `pattern`, `term`, `demos`, `beam`, `hello`), `CMAKE_BUILD_TYPE=Release`, `IMAGE_ID=…`, `PICO_PORT=/dev/ttyACM0`.
 
 ## Hardware bring-up (`hello_pico`)
 
@@ -120,7 +121,6 @@ If force-reboot fails: hold **BOOTSEL**, plug USB, `make pico-discover` should s
 | [`docker/docker-compose.platform-amd64.yml`](../docker/docker-compose.platform-amd64.yml) / `…arm64.yml` | Explicit `platform:` for this host |
 | [`docker/with-docker.sh`](../docker/with-docker.sh) | `sg docker` when the account is in the group but this shell is not |
 | [`pico_sdk_import.cmake`](../pico_sdk_import.cmake) | Official SDK locator; container sets `PICO_SDK_PATH` |
-| [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json) | Same Compose stack (including USB) for Cursor / VS Code |
 
 | In the image | |
 |--------------|--|
@@ -132,11 +132,7 @@ USB Compose is **not** merged for `make smoke` / `make build APP=hello` so ordin
 
 ## Agents
 
-Firmware and USB work use the existing Make targets, not a host SDK. Cursor: always-on rule [`.cursor/rules/pico-dev-toolchain.mdc`](../.cursor/rules/pico-dev-toolchain.mdc) and skill [`.cursor/skills/pico-dev-hil/SKILL.md`](../.cursor/skills/pico-dev-hil/SKILL.md) (`make help`, then `pico-discover` / `make test APP=hello`).
-
-## Cursor / VS Code
-
-Reopen the folder in a container via [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json). That uses `docker-compose.yml` + `docker-compose.usb.yml` and workspace `/workspace`.
+Firmware and USB work use the existing Make targets from the Dev-Host, not a host SDK and not an editor session inside pico-dev. Cursor: always-on rule [`.cursor/rules/pico-dev-toolchain.mdc`](../.cursor/rules/pico-dev-toolchain.mdc) and skill [`.cursor/skills/pico-dev-hil/SKILL.md`](../.cursor/skills/pico-dev-hil/SKILL.md) (`make help`, then `pico-discover` / `make test APP=hello`).
 
 ## Troubleshooting
 

@@ -5,6 +5,7 @@ alwaysApply: true
 
 # Pico-dev toolchain
 
-- Build, flash, and USB serial **only** via repo-root Make (`make help`). Do not install Pico SDK or `gcc-arm-none-eabi` on the host. Do not `cmake` outside the container. Do not `picotool load -f`.
+- Edit and Git on the Dev-Host. Call into pico-dev only from that host, through repo-root Make (`make help`). Do not develop inside the container, and do not reopen the workspace there. `make shell` / `make shell-usb` are a call-in; leave with `exit`.
+- Build, flash, and USB serial **only** via those Make targets. Do not install Pico SDK or `gcc-arm-none-eabi` on the host. Do not `cmake` outside the container. Do not `picotool load -f`.
 - If a Pico is on USB, firmware work is **not done** until `make test APP=hello` (CDC `digest=`). No board (`make pico-discover` empty) is an explicit HIL skip, not a pass.
 - Procedure: [`.cursor/skills/pico-dev-hil/SKILL.md`](../skills/pico-dev-hil/SKILL.md). Detail: [`docs/toolchains.md`](../../docs/toolchains.md).

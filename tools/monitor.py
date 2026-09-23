@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""USB CDC monitor for crt-drive firmware apps (pattern, term, demos, hello_pico)."""
+"""USB CDC monitor for crt-drive firmware apps (pattern, term, demos, beam, hello_pico)."""
 
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ PORT_GLOBS = (
 HELP = {
     "pattern": (
         "pattern: 1/c crosshatch  2/i intensity  3/f focus  4/n indian-head  "
-        "5/o full-on  6 sync-squares  m 80/132  r 60/78  a/d H  w/s V  0 reset  "
-        "BOOTSEL cycles  ? help  q quit"
+        "5/o full-on  6 sync-squares  7/g pixel-code  m 80/132  r 60/78  "
+        "a/d H  w/s V  0 reset  BOOTSEL cycles  ? help  q quit"
     ),
     "term": "term: type to the glass TTY; BOOTSEL cycles 78/60 x 80/132; ? status; Ctrl-C quit",
     "demos": (
@@ -38,6 +38,10 @@ HELP = {
     "cross60": (
         "cross60: 1 plus  2 box  3 grid  4 meas  m 80/132  r 60/78  "
         "a/d H 16px  w/s V 1 line  A/D 64px  W/S 5 lines  0 reset  ? help  q quit"
+    ),
+    "beam": (
+        "beam: 1 comet  2 behind  3 ahead  4 vblank  5 tear  p reset pio  "
+        "m 80/132  r 60/78  ? status  q quit"
     ),
     "hello": "hello_pico: p ping  q quit",
 }
@@ -119,6 +123,8 @@ def detect_app(line: str) -> str | None:
         return "term"
     if line.startswith("crt-demos"):
         return "demos"
+    if line.startswith("crt-beam"):
+        return "beam"
     if line.startswith("crt-cross60"):
         return "cross60"
     if line.startswith("crt-drive hello_pico"):
@@ -202,6 +208,43 @@ def hil_demos(fd: int, _line: str, timeout_s: float, digest: str) -> int:
     raise SystemExit("timed out waiting for crt-demos scene=radar")
 
 
+def _field_int(line: str, key: str) -> int | None:
+    token = key + "="
+    start = line.find(token)
+    if start < 0:
+        return None
+    i = start + len(token)
+    j = i
+    while j < len(line) and line[j].isdigit():
+        j += 1
+    if j == i:
+        return None
+    return int(line[i:j])
+
+
+def hil_beam(fd: int, _line: str, timeout_s: float, digest: str) -> int:
+    os.write(fd, b"?")
+    for nxt in read_lines(fd, timeout_s):
+        if not nxt:
+            continue
+        print(f"rx: {nxt}", flush=True)
+        if not nxt.startswith("crt-beam digest="):
+            continue
+        if not digest_ok(nxt, digest):
+            raise SystemExit(
+                f"status digest mismatch: got {nxt!r}, expected digest={digest}"
+            )
+        line_n = _field_int(nxt, "line")
+        then_n = _field_int(nxt, "then")
+        if line_n is None or then_n is None:
+            raise SystemExit(f"expected line= and then= in {nxt!r}")
+        if line_n == then_n:
+            raise SystemExit(f"beam line did not move: {nxt!r}")
+        print("crt-beam monitor: ok", flush=True)
+        return 0
+    raise SystemExit("timed out waiting for crt-beam line sample")
+
+
 def hil_cross60(_fd: int, line: str, _timeout_s: float, _digest: str) -> int:
     if not line.startswith("crt-cross60"):
         raise SystemExit(f"expected crt-cross60 banner, got {line!r}")
@@ -230,6 +273,7 @@ HIL = {
     "pattern": hil_pattern,
     "term": hil_term,
     "demos": hil_demos,
+    "beam": hil_beam,
     "cross60": hil_cross60,
     "hello": hil_hello,
 }
@@ -289,7 +333,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", default=os.environ.get("PICO_PORT", ""))
     parser.add_argument("--app", default=os.environ.get("MONITOR_APP", ""),
-                        help="force dialect: pattern, term, demos, cross60, hello")
+                        help="force dialect: pattern, term, demos, beam, cross60, hello")
     parser.add_argument("--digest", default=os.environ.get("IMAGE_ID", ""))
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument(
@@ -305,7 +349,9 @@ def main() -> int:
     args = parser.parse_args()
     forced = args.app.strip() or None
     if forced and forced not in HELP:
-        raise SystemExit(f"unknown --app {forced!r} (pattern, term, demos, cross60, hello)")
+        raise SystemExit(
+            f"unknown --app {forced!r} (pattern, term, demos, beam, cross60, hello)"
+        )
     digest = args.digest.strip()
     port = wait_port(args.port or None, args.timeout)
     print(f"using {port}", flush=True)

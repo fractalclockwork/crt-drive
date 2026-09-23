@@ -25,7 +25,7 @@ The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberr
 
 ## Dev-Host toolchain (Docker)
 
-Firmware is compiled in the `pico-dev` image with this repository bind-mounted at `/workspace`. The container runs on the Dev-Host; plug the Pico into **this** machine (no Raspberry Pi gateway). Modeled on [fractalclockwork/cede](https://github.com/fractalclockwork/cede) `lab/docker/pico-dev`.
+Edit on the Dev-Host. Firmware is compiled by calling into the `pico-dev` image from that host (`make` at the repository root); the repo is bind-mounted at `/workspace` for the call. Plug the Pico into **this** machine (no Raspberry Pi gateway). Modeled on [fractalclockwork/cede](https://github.com/fractalclockwork/cede) `lab/docker/pico-dev`.
 
 **Full guide:** [docs/toolchains.md](docs/toolchains.md) (setup, USB modes, `hello_pico`, troubleshooting). Short path: [`docker/README.md`](docker/README.md).
 
@@ -43,7 +43,7 @@ make build APP=demos
 make help           # all targets
 ```
 
-Reopen the folder in a container via [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) for the same image inside Cursor/VS Code.
+`make shell` and `make shell-usb` are a call into the image. Leave with `exit`. The editor stays on the Dev-Host.
 
 ## Phased development
 

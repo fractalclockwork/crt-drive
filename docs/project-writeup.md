@@ -91,7 +91,7 @@ USB CDC is the control port (`tools/monitor.py`, `make monitor`). The running im
 
 ## HIL
 
-Firmware is built in Docker on the machine the Pico is plugged into. The image is `crt-drive/pico-dev:local` (ARM GCC, CMake, Ninja, Pico SDK and picotool 2.1.1). The repository is bind-mounted at `/workspace`. There is no second computer in the flash path. Host installs of the SDK or `gcc-arm-none-eabi` are out of the procedure. Commands are `make` targets from the repository root ([toolchains.md](toolchains.md)).
+Editing stays on the Dev-Host, the machine the Pico is plugged into. Make on that host calls into `crt-drive/pico-dev:local` (ARM GCC, CMake, Ninja, Pico SDK and picotool 2.1.1) and bind-mounts the repository at `/workspace` for the call. There is no second computer in the flash path, and the editor does not live in the container. Host installs of the SDK or `gcc-arm-none-eabi` are out of the procedure. Commands are `make` targets from the repository root ([toolchains.md](toolchains.md)).
 
 The loop is:
 
@@ -112,6 +112,14 @@ That USB loop proves the image, the clock, and the command path. Sync rate and p
 USB can name the firmware. The phosphor is where that firmware becomes a picture: box size, cell pitch, a missing top line, a hair of the frame in retrace, bloom on the bold level. Those used to be ruler readings taken at the tube and typed into the HIL record. A camera on the face makes the same reading a frame on the Dev-Host, taken in the same session as the CDC banner.
 
 **Instrument.** Logitech Webcam C310, USB ID `046d:081b`, on the same host and the same bus as the Pico (`2e8a:000a`). It sits on the glass for a full-frame view of the phosphor and the bezel, which is the reference the margins are measured against.
+
+**Setup.** Camera HIL starts with that view, before a still is kept. `make camera-check` opens it and exits 0 only after the raster has stayed fully inside the picture for one second. `make camera` is the same window left open. Both run on the host (`tools/camera.py`), next to the Pico container: ffmpeg takes the C310 as MJPEG at 1280×960, and the script asks the running image for a full-raster drawing — crosshatch (`1`) on `crt-pattern`, the measure box (`4`) on `crt-cross60`. The bezel has to be in the picture on every side. A clipped tube, or a corner of text with no box, is a miss.
+
+**Automated measurement.** Each frame is scored in camera pixels. A luma sample on every fourth pixel finds the valley between the dark face and the brighter room. The long dark run is the glass; the window draws that rectangle in yellow. Phosphor is the green that sits well above the valley, inside the face; the window draws that rectangle in green. The pass is the yellow box inset from all four edges of the picture, green in every quadrant, and the green box more than half the glass width and just under half its height. `python3 tools/camera.py --once` writes the same overlay to `/tmp/crt-camera-once.jpg` and prints both rectangles. Those camera-pixel boxes are the live reading. The millimeter table below is the same edges, taken with a ruler on this tube and kept as the scale.
+
+**Light.** Room light moves through the day, and it moves that valley. An afternoon sun can glue the face to the surround; a dim corner can swallow the bezel. Confirming that the camera still sees the whole tube is a daytime check. Reading the dark border around the raster is a night check, in a dark room, with brightness and contrast at maximum. Then the unscanned glass stays black and the lit pixels are the only bright thing in the frame. When the room is as dark as the face, the checker stops looking for a tube inside a bright surround and scores the phosphor box itself: inset on every side, present in every quadrant, and large in the picture. Edge sessions are those dark-room runs.
+
+**Blanking border.** The chassis blanking circuit cuts the electron beam. Where it holds the beam off, the glass stays dark, and a video level written into that border does not light. That border is the drawable limit. Inside it the yoke is still scanning and a pixel can land. On it the beam is already off. The Pico’s own blank is separate: an empty pixel FIFO, plus the trailing zero bytes, holds V0 and V1 low. The border on the glass is the tube. With the room dark, the border is visible, so the active raster can be walked outward — more dots, more lines, porch counts — until the lit edge sits against it. The chassis pots stay where the 60 Hz margin locked them.
 
 **What a frame is for.** The measure image (`crt_cross60`) is the subject: bold raster box, normal grid, bold plus. One still per mode (60/78 × 80/132), shot while `make monitor` is showing the banner that names the mode and the porch (`hpad`, `vbp`, `vfp`). The banner is the label. The frame is the measurement.
 
@@ -154,12 +162,17 @@ A frame is read the same way the ruler was:
 
 The four keepers live in [glass/](glass/). `make camera` is the live C310 view; `make camera-check` exits 0 only after the raster stays fully inside that picture. A still is glass evidence when it sits with the CDC line it was shot under, the same way `digest=` is the USB evidence.
 
-**Pattern raster, same bezel.** Later pattern firmware uses one dense line for both rates (83.428 MHz, 2663 dots, about 31.33 kHz) so L201 stays where 60 Hz put it. Brightness and contrast were at maximum, so a dark border is unscanned glass or blanking, not a dim picture. The C310 frame is scaled to the lit inner bezel, 24.6 × 19.0 cm.
+**Pixel-code probe, factory timing kept.** The running spec is the factory table above: 32.1 MHz, 1024-dot line, 800 × 416 in a 523-line 60 Hz frame, and 800 × 377 in a 402-line 78 Hz frame. Pots stay at the 60 Hz 11 mm setup. An earlier dense line (83.428 MHz, 2663 dots, 2080 × 476) was measured and set aside; the keeper from that try is [glass/78Hz-2080x476.jpg](glass/78Hz-2080x476.jpg). It is not the raster.
 
-At `crt-pattern 78Hz 1968x416 crosshatch hpad=0 vbp=8 vfp=4 vsize78=1` the box was **21.4 × 12.9 cm**. Gaps: left **1.0 cm**, right **2.2 cm**, top **3.3 cm**, bottom **2.8 cm**. The extra centimeter on the right was the 112 dots removed from the 2080-dot active time so a 504-line 60 Hz buffer would still link.
+The probe is a seventh pattern drawing, pixel-code, on the factory 1024-dot horizontal program. Dot 0 is the first dot after `/HSYNC` rises. Line 0 is the first line after `/VSYNC` rises. Each lit dot is one nibble of its scan line and its 100-dot group, so a dot on the glass names its place in the line. Picture groups light every eighth line. Groups that start at dot 800, and every group on a porch or sync line, light on every line. DMA for that drawing runs 1008 dots, so the code can sit in the front porch and in the first part of the sync pulse. Dots 996–1023 stay black. The active picture width stays 800.
 
-Pushed, pots untouched: `crt-pattern 78Hz 2080x476 crosshatch hpad=0 vbp=8 vfp=4 vsize78=1`. The vertical wrap is 494 lines (63.4 Hz) with GPIO 4 high, so VR301 has a longer ramp. The box is **22.7 × 14.8 cm**. Gaps: left **1.0 cm**, right **0.9 cm**, top **2.4 cm**, bottom **1.8 cm**. The top line is still on the glass at `vbp=8`. SRAM stops the step there: 2080 × 476 fills the pattern buffer, a few hundred bytes under the top of main RAM. Pattern 60 Hz is 476 lines inside the same 523-line frame. Term and demos keep the 434-line wrap.
+Daylight C310 stills, pots untouched, same horizontal program at both rates:
 
-![78 Hz pattern crosshatch after the push: 2080×476, right edge in line with the left](glass/78Hz-2080x476.jpg)
+| | 60 Hz | 78 Hz |
+| --- | --- | --- |
+| Banner under test | `crt-pattern 60Hz 800x509 pixel-code hpad=0 vbp=4 vfp=4` | `crt-pattern 78Hz 800x377 pixel-code hpad=0 vbp=8 vfp=11` |
+| What that image was | Factory 523-line frame. Active was a probe: 509 lines, 4 after sync, 4 before sync. | Factory vertical: 377 active, 8 back porch, 11 front porch, 6 sync. |
+| Horizontal code on the glass | Front-porch bar at dot 868, and the group that starts at dot 900 (its bar is dot 969, inside the 111-dot `/HSYNC`). The diagonals stop before the right bezel. | Same dots, same place in the line. |
+| Vertical code on the glass | The 509-line probe filled the lit raster to the top and the bottom. | The 11 front-porch lines are a dense band under the picture. The 8 back-porch lines are dark. The 6-line `/VSYNC` is not a second band. |
 
-*78 Hz pattern. 476 active lines, 494-line frame, `vbp=8`. Right margin matches the left.*
+The porch dots that light are a blanking observation. They do not move the factory active window. Active video stays dots 0–799 and the line counts in the table above. The 509-line 60 Hz probe is recorded here and is not the pattern image; that image is back on 416 lines, `vbp=51`, `vfp=50`. The dark glass under the 78 Hz band is unscanned at 402 lines. Lengthening that frame is a separate experiment.

@@ -28,6 +28,9 @@ afp_inner:
 sync_loop:
     jmp x-- sync_loop [31]          ; 160
     nop [2]                         ; 3
-    irq 0                           ; 1
+    irq nowait 0                    ; 1. Plain `irq 0` waits for vsync to clear
+                                    ; the flag. Stopping both SMs in that
+                                    ; window leaves hsync stalled and the
+                                    ; raster does not return.
     ; 1+1+160+3+1 = 166
 .wrap

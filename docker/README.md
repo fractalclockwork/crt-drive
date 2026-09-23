@@ -1,6 +1,6 @@
 # pico-dev Docker image
 
-Dev-Host RP2040 toolchain for this repo (no Pi gateway).
+Dev-Host RP2040 toolchain for this repo (no Pi gateway). Edit on the Dev-Host. This image is called into from that host with `make`; `exit` leaves a `make shell` session.
 
 **How to use it:** [docs/toolchains.md](../docs/toolchains.md)
 
