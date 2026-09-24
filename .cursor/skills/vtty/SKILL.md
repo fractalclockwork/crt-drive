@@ -3,9 +3,9 @@ name: vtty
 description: >-
   Drives the crt_vtty video TTY from the Dev-Host: framed USB commands, the
   glass-font caret, Noto labels, and the weather, news, and horoscope page.
-  Use when editing apps/vtty, tools/vtty.py, tools/vtty_proto.py, tools/weather.py,
-  or when the user mentions vtty, the CRT terminal window, a horoscope, or the
-  weather page.
+  Use when editing apps/vtty, tools/vtty.py, tools/vtty_proto.py,
+  tools/vtty_host_news.py, tools/vtty_host_example.py, or when the user
+  mentions vtty, the CRT terminal window, a horoscope, or the weather page.
 ---
 
 # Video TTY
@@ -36,9 +36,9 @@ make vtty-stop
 uv run python tools/vtty.py caps
 ```
 
-`make vtty-start` runs `tools/weather.py` unless `HOST=` names another `tools/<name>.py`. The pid is `.tmp/vtty-host.pid` and the log is `.tmp/vtty-host.log`. `make vtty-stop` signals that session and any host still holding the Pico serial node. `make flash` and `make test` stop the page first. Do not `pkill -f` the weather command; that pattern matches the shell that launched it. Do not `sudo usermod`. `tools/vtty.py` re-executes with `sg dialout` when this shell is not in the group.
+`make vtty-start` runs `tools/vtty_host_news.py` unless `HOST=` names another `tools/<name>.py` (`HOST=vtty_host_example` is the short FILL/LABEL/AREA/TEXT page). The pid is `.tmp/vtty-host.pid` and the log is `.tmp/vtty-host.log`. `make vtty-stop` signals that session and any host still holding the Pico serial node. `make flash` and `make test` stop the page first. Do not `pkill -f` the host command; that pattern matches the shell that launched it. Do not `sudo usermod`. `tools/vtty.py` re-executes with `sg dialout` when this shell is not in the group.
 
-The weather loop is the page on the glass: weather for 10 seconds, news, one zodiac sign, news. News and the horoscope type at 400 words a minute and hold 5 seconds. After a vtty flash, `make vtty-start` if that page should be on the glass again. One-shot `tools/vtty.py` commands need the page stopped so they can open the port.
+Boot and a dropped DTR show the Indian Head with "PLEASE STAND BY" (`indian_head_standby` in `video/indian_head.c`). The first host byte turns the blanking-interval bars off. Host opens set `HUPCL` and drop DTR on close. Without that, Linux leaves DTR high and the last picture stays, including the linked card from `make test APP=vtty`. The news loop is the default page on the glass: weather for 10 seconds, news, one zodiac sign, news. News and the horoscope type at 400 words a minute and hold 5 seconds. After a vtty flash, `make vtty-start` if that page should be on the glass again. One-shot `tools/vtty.py` commands need the page stopped so they can open the port.
 
 ## Commands that are safe on a live link
 
@@ -51,4 +51,4 @@ PUT and DATA erase the flash catalog while USB's interrupt handler is in flash. 
 
 ## Weather page
 
-[`tools/weather.py`](../../../tools/weather.py) is the cycle. Horoscopes come from CosmyDay (`/content/daily`), one pull per UTC day, cached in `.tmp/news.json` with the news cursor and the sign index. Do not add an API key. The zodiac mark is a host 2 bpp blit. The sign name is a LABEL. The horoscope is TEXT inside the AREA under that header, then AREA is restored to the full grid before the next weather FILL.
+[`tools/vtty_host_news.py`](../../../tools/vtty_host_news.py) is the cycle. Horoscopes come from CosmyDay (`/content/daily`), one pull per UTC day, cached in `.tmp/news.json` with the news cursor and the sign index. Do not add an API key. The zodiac mark is a host 2 bpp blit. The sign name is a LABEL. The horoscope is TEXT inside the AREA under that header, then AREA is restored to the full grid before the next weather FILL.

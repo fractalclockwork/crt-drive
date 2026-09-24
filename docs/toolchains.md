@@ -68,7 +68,7 @@ All of these are run from the **repository root**. Equivalent: `make -C docker <
 | `make term-build` / `term-flash` / `term-monitor` / `term-test` | Aliases for the term app |
 | `make build APP=demos` / `flash` / `test` | Phosphor reel, four-mode scanout ([`apps/demos`](../apps/demos/) → `build/demos/crt_demos.uf2`) |
 | `make build APP=beam` / `flash` / `test` | Beam-line update tests ([`apps/beam`](../apps/beam/) → `build/beam/crt_beam.uf2`). CDC `?` must show `line=` and `then=` differ |
-| `make build APP=vtty` / `flash` / `test` | Video TTY ([`apps/vtty`](../apps/vtty/) → `build/vtty/crt_vtty.uf2`). Banner, then a framed `Hello` and `SHOW` of the linked 128×64 card. How to drive it: [vtty.md](vtty.md). `make vtty-start` / `vtty-stop` is the host page (`HOST=weather`). `make flash` and `make test` stop that page first. One-shot host tool: `uv run python tools/vtty.py` (`uv sync` installs Pillow into `.venv`) |
+| `make build APP=vtty` / `flash` / `test` | Video TTY ([`apps/vtty`](../apps/vtty/) → `build/vtty/crt_vtty.uf2`). Banner, then a framed `Hello` and `SHOW` of the linked 128×64 card. How to drive it: [vtty.md](vtty.md). `make vtty-start` / `vtty-stop` is the host page (`HOST=vtty_host_news`). `make flash` and `make test` stop that page first. One-shot host tool: `uv run python tools/vtty.py` (`uv sync` installs Pillow into `.venv`) |
 | `make demos-build` / `demos-flash` / `demos-monitor` / `demos-test` | Aliases; `demos-test` is unique `digest=` then CDC `2` → `scene=radar`, or HIL skip |
 | `make build APP=cross60` / `flash` / `test` | Same as default; 60 Hz 1-pixel plus |
 | `make picotool-info` | `picotool info` (needs BOOTSEL) |

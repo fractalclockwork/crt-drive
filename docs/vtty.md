@@ -1,6 +1,6 @@
 # Video TTY
 
-`crt_vtty` is the host-driven page on the glass. The Pico boots to a blank 78 Hz 80-column raster and speaks a framed USB session. Text uses the glass terminal font. Pictures and Noto labels are drawn into the framebuffer. The live page is [`tools/weather.py`](../tools/weather.py).
+`crt_vtty` is the host-driven page on the glass. The Pico boots to the Indian Head with "PLEASE STAND BY" on a 78 Hz 80-column raster and speaks a framed USB session. That card comes back when the host closes the serial port. Text uses the glass terminal font. Pictures and Noto labels are drawn into the framebuffer. The news page is [`tools/vtty_host_news.py`](../tools/vtty_host_news.py). [`tools/vtty_host_example.py`](../tools/vtty_host_example.py) is a short page that shows FILL, LABEL, AREA, and TEXT.
 
 Build and flash only from the Dev-Host, through repo-root Make. Do not `cmake` on the host, and do not `picotool load -f`. Detail of the image is in [toolchains.md](toolchains.md).
 
@@ -24,7 +24,8 @@ The host tool needs group `dialout` on `/dev/serial/by-id/usb-Raspberry_Pi_Pico_
 ## Pages
 
 ```bash
-make vtty-start          # tools/weather.py, until make vtty-stop
+make vtty-start          # tools/vtty_host_news.py, until make vtty-stop
+make vtty-start HOST=vtty_host_example
 make vtty-stop
 make vtty-status
 uv run python tools/vtty.py text "Hello" --crlf
@@ -32,7 +33,7 @@ uv run python tools/vtty.py label 24 48 32 3 "San Francisco"
 uv run python tools/vtty.py demo
 ```
 
-`make vtty-start` runs the host page in its own session and writes `.tmp/vtty-host.pid`. The log is `.tmp/vtty-host.log`. `HOST=` picks another `tools/<name>.py` (`make vtty-start HOST=weather` is the default). `make vtty-stop` signals that session, and any host process still holding the Pico serial node. One-shot `tools/vtty.py` commands are not the page; stop the page before them so they can open the port.
+`make vtty-start` runs the host page in its own session and writes `.tmp/vtty-host.pid`. The log is `.tmp/vtty-host.log`. `HOST=` picks another `tools/<name>.py` (`make vtty-start HOST=vtty_host_news` is the default). `make vtty-stop` signals that session, and any host process still holding the Pico serial node. One-shot `tools/vtty.py` commands are not the page; stop the page before them so they can open the port. Closing the port returns the glass to the Indian Head.
 
 `tools/vtty.py` commands:
 

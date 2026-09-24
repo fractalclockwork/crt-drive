@@ -70,6 +70,7 @@ add_executable(crt_vtty
     "${CRT_REPO_ROOT}/apps/term/screen.c"
     "${CRT_REPO_ROOT}/apps/term/font_7x10.c"
     "${CRT_REPO_ROOT}/apps/term/tty.c"
+    "${CRT_REPO_ROOT}/video/indian_head.c"
     "${CRT_REPO_ROOT}/video/scanout.c"
     "${CRT_REPO_ROOT}/font/font.c"
     "${CMAKE_CURRENT_BINARY_DIR}/noto_sans_regular.c"

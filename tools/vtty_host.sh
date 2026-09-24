@@ -125,7 +125,7 @@ do_stop() {
 }
 
 do_start() {
-    host=${1:-weather}
+    host=${1:-vtty_host_news}
     case "$host" in
         *[!A-Za-z0-9_-]*|"")
             echo "vtty host: bad name '$host'" >&2
@@ -177,7 +177,7 @@ do_status() {
 cmd=${1:-}
 shift || true
 case "$cmd" in
-    start) do_start "${1:-weather}" ;;
+    start) do_start "${1:-vtty_host_news}" ;;
     stop) do_stop "${1:-}" ;;
     status) do_status ;;
     *) usage ;;

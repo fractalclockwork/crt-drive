@@ -13,7 +13,8 @@ Examples:
   uv run python tools/vtty.py put 1 picture.ppm
   uv run python tools/vtty.py put 2 card.2bpp --width 128 --height 64
   uv run python tools/vtty.py label 24 48 32 3 "San Francisco"
-  uv run python tools/weather.py
+  uv run python tools/vtty_host_news.py
+  uv run python tools/vtty_host_example.py
 """
 
 from __future__ import annotations
@@ -82,7 +83,9 @@ def configure(fd: int) -> None:
     attrs = termios.tcgetattr(fd)
     attrs[0] = 0
     attrs[1] = 0
-    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+    # HUPCL drops DTR when the last fd closes, including a killed host.
+    # Without it Linux leaves DTR high and the last picture stays on the glass.
+    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL | termios.HUPCL
     attrs[3] = 0
     attrs[4] = termios.B115200
     attrs[5] = termios.B115200
@@ -95,6 +98,18 @@ def configure(fd: int) -> None:
     fcntl.ioctl(fd, TIOCMGET, buf, True)
     buf[0] |= TIOCM_DTR | TIOCM_RTS
     fcntl.ioctl(fd, TIOCMSET, buf, True)
+
+
+def release(fd: int) -> None:
+    """Drop DTR so the Pico returns to the Indian Head, then close."""
+    buf = array.array("I", [0])
+    try:
+        fcntl.ioctl(fd, TIOCMGET, buf, True)
+        buf[0] &= ~(TIOCM_DTR | TIOCM_RTS)
+        fcntl.ioctl(fd, TIOCMSET, buf, True)
+    except OSError:
+        pass
+    os.close(fd)
 
 
 def wait_banner(fd: int, timeout_s: float) -> str:
@@ -553,7 +568,7 @@ def main() -> int:
         else:
             raise SystemExit(f"unknown command {args.cmd}")
     finally:
-        os.close(fd)
+        release(fd)
     return 0
 
 

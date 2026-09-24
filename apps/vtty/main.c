@@ -6,6 +6,7 @@
 #include "catalog.h"
 #include "recover.h"
 #include "../../font/font.h"
+#include "indian_head.h"
 #include "scanout.h"
 #include "session.h"
 #include "tty.h"
@@ -14,6 +15,8 @@
 #define BANNER_MS 250
 
 static bool host_spoke;
+static bool link_up;
+static absolute_time_t link_down_at;
 
 static void print_banner(void) {
     const char *hz = scanout_mode_78() ? "78Hz" : "60Hz";
@@ -23,14 +26,23 @@ static void print_banner(void) {
            catalog_slots_used());
 }
 
+/* Indian Head until a host paints, and again after that host closes the port. */
+static void show_home(void) {
+    session_reset();
+    host_spoke = false;
+    tty_init();
+    indian_head_standby();
+    link_down_at = nil_time;
+}
+
 int main(void) {
     /* Parse Noto before the state machines run. A flash walk while DMA
      * is feeding the beam stalls the pixel FIFO and leaves retrace lit. */
     font_init();
     scanout_init(pio0);
     scanout_set_mode(MODE_78_80);
-    tty_init();
     catalog_init();
+    show_home();
 
     stdio_init_all();
     stdio_set_translate_crlf(&stdio_usb, false);
@@ -57,6 +69,9 @@ int main(void) {
             if (c < 0) {
                 break;
             }
+            if (!host_spoke) {
+                scanout_retrace_test(false);
+            }
             host_spoke = true;
             last_rx = get_absolute_time();
             session_rx((uint8_t)c);
@@ -65,8 +80,24 @@ int main(void) {
         if (session_busy() &&
             absolute_time_diff_us(last_rx, get_absolute_time()) > 200000) {
             session_reset();
-            host_spoke = false;
-            next_banner = get_absolute_time();
+        }
+
+        /* DTR drop is the host letting go. Wait out a one-sample glitch. */
+        bool up = stdio_usb_connected();
+        if (up) {
+            link_up = true;
+            link_down_at = nil_time;
+        } else if (link_up && host_spoke) {
+            if (is_nil_time(link_down_at)) {
+                link_down_at = get_absolute_time();
+            } else if (absolute_time_diff_us(link_down_at, get_absolute_time()) > 300000) {
+                show_home();
+                link_up = false;
+                next_banner = get_absolute_time();
+            }
+        } else {
+            link_up = false;
+            link_down_at = nil_time;
         }
 
         if (!host_spoke && time_reached(next_banner)) {

@@ -89,7 +89,9 @@ def configure(fd: int) -> None:
     attrs = termios.tcgetattr(fd)
     attrs[0] = 0
     attrs[1] = 0
-    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+    # HUPCL drops DTR on the last close. Otherwise the linked card stays up
+    # after make test APP=vtty, because the Pico still sees a host.
+    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL | termios.HUPCL
     attrs[3] = 0
     attrs[4] = termios.B115200
     attrs[5] = termios.B115200
@@ -102,6 +104,16 @@ def configure(fd: int) -> None:
     fcntl.ioctl(fd, TIOCMGET, buf, True)
     buf[0] |= TIOCM_DTR | TIOCM_RTS
     fcntl.ioctl(fd, TIOCMSET, buf, True)
+
+
+def drop_dtr(fd: int) -> None:
+    buf = array.array("I", [0])
+    try:
+        fcntl.ioctl(fd, TIOCMGET, buf, True)
+        buf[0] &= ~(TIOCM_DTR | TIOCM_RTS)
+        fcntl.ioctl(fd, TIOCMSET, buf, True)
+    except OSError:
+        pass
 
 
 def read_lines(fd: int, timeout_s: float):
@@ -416,6 +428,7 @@ def main() -> int:
             return 0
         return interactive(fd, forced)
     finally:
+        drop_dtr(fd)
         os.close(fd)
 
 

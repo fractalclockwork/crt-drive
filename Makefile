@@ -25,7 +25,7 @@ help:
 	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, beam, vtty, rick, hello"
 	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos | APP=beam | APP=vtty | APP=rick   make test APP=hello"
 	@echo "  Aliases: pattern-*  term-*  demos-*  beam-*  vtty-*  rick-*  cross60-*  hello-*   (build, flash, monitor, test)"
-	@echo "  make vtty-start       — host page on the glass (HOST=weather)"
+	@echo "  make vtty-start       — host page on the glass (HOST=vtty_host_news)"
 	@echo "  make vtty-stop        — stop that page and free the Pico serial node"
 	@echo "  make vtty-status"
 	@echo "  make camera           — live C310 view and framing-pattern overlay"
@@ -144,8 +144,8 @@ vtty-monitor:
 vtty-test:
 	$(MAKE) test APP=vtty
 
-# HOST is the tools/<name>.py page that owns the vtty serial node. Default weather.
-HOST ?= weather
+# HOST is the tools/<name>.py page that owns the vtty serial node.
+HOST ?= vtty_host_news
 
 vtty-start:
 	tools/vtty_host.sh start $(HOST)

@@ -29,6 +29,7 @@ add_custom_command(
 
 add_executable(crt_pattern
     main.c
+    "${CRT_REPO_ROOT}/video/indian_head.c"
     "${CRT_REPO_ROOT}/video/scanout.c"
     "${CRT_REPO_ROOT}/font/font.c"
     "${CMAKE_CURRENT_BINARY_DIR}/noto_sans_regular.c"
