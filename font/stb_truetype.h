@@ -1119,6 +1119,10 @@ typedef int stbtt__test_oversample_pow2[(STBTT_MAX_OVERSAMPLE & (STBTT_MAX_OVERS
 #define STBTT_RASTERIZER_VERSION 2
 #endif
 
+#ifndef STBTT_SCANLINE_CHECKPOINT
+#define STBTT_SCANLINE_CHECKPOINT() ((void)0)
+#endif
+
 #ifdef _MSC_VER
 #define STBTT__NOTUSED(v)  (void)(v)
 #else
@@ -2939,6 +2943,7 @@ static void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e,
    e[n].y0 = (off_y + result->h) * (float) vsubsample + 1;
 
    while (j < result->h) {
+      STBTT_SCANLINE_CHECKPOINT();
       STBTT_memset(scanline, 0, result->w);
       for (s=0; s < vsubsample; ++s) {
          // find center of pixel for this scanline

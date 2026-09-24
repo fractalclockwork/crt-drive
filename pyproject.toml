@@ -1,0 +1,8 @@
+[project]
+name = "crt-drive"
+version = "0.1.0"
+description = "Dev-Host tools"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=12.3.0",
+]

@@ -5,6 +5,7 @@
 #include "hardware/gpio.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
+#include "hardware/sync.h"
 
 #include "scanout.h"
 #include "video_pixel.pio.h"
@@ -58,6 +59,7 @@
 #define CHAR_H_78       14
 #define H_PAD_WORDS     5
 #define H_PAD_BYTES     (H_PAD_WORDS * 4)
+_Static_assert(H_PAD_BYTES == SCANOUT_H_PAD_BYTES, "header pad matches the row prefix");
 #define PIXEL_STORE     300                 /* 1188/4 = 297, 32-bit padded */
 #define TAIL_BYTES      4
 #define STORE_STRIDE    (H_PAD_BYTES + PIXEL_STORE + TAIL_BYTES)
@@ -98,6 +100,21 @@ static bool retrace_test;
 static bool margin_blips;
 static bool code_blanking;
 
+/* Picture DMA source. Pending is published on the vertical rewind so a
+ * frame change does not tear a line. Rows may sit in flash. */
+typedef struct {
+    const uint8_t *rows;
+    uint16_t stride;
+    uint16_t dma_bytes;
+    uint16_t y0;
+    uint16_t nrows;
+} ExtPic;
+
+static ExtPic ext_pend;
+static ExtPic ext_live;
+static volatile bool ext_dirty;
+static volatile uint32_t rewind_count;
+
 static PIO pio_crt;
 static uint offset_pixel;
 static uint offset_hsync;
@@ -131,6 +148,9 @@ static uint8_t mode_v_bp_max(void) {
 }
 
 static uint mode_dma_bytes(void) {
+    if (ext_live.rows != NULL && ext_live.dma_bytes != 0) {
+        return ext_live.dma_bytes;
+    }
     return mode_132() ? DMA_BYTES_132 : DMA_BYTES_80;
 }
 
@@ -185,7 +205,7 @@ uint16_t scanout_frame_lines(void) {
     return mode_78() ? (uint16_t)(HEIGHT_78 + V_BLANK_78) : (uint16_t)V_LINES_60;
 }
 
-uint16_t scanout_beam_line(void) {
+uint16_t __no_inline_not_in_flash_func(scanout_beam_line)(void) {
     uint32_t addr = dma_channel_hw_addr((uint)kick_chan)->read_addr;
     uint32_t base = (uint32_t)line_ptrs;
 
@@ -274,6 +294,27 @@ void scanout_scroll(uint16_t lines) {
     }
 }
 
+void scanout_scroll_band(uint16_t y, uint16_t height, uint16_t lines) {
+    uint16_t limit = scanout_height();
+    if (height == 0 || y >= limit) {
+        return;
+    }
+    if ((uint32_t)y + height > limit) {
+        height = (uint16_t)(limit - y);
+    }
+    if (lines == 0 || lines >= height) {
+        for (uint16_t row = y; row < (uint16_t)(y + height); row++) {
+            memset(frame_buffer[row], 0, STORE_STRIDE);
+        }
+        return;
+    }
+    memmove(frame_buffer[y], frame_buffer[y + lines],
+            (size_t)(height - lines) * STORE_STRIDE);
+    for (uint16_t row = (uint16_t)(y + height - lines); row < (uint16_t)(y + height); row++) {
+        memset(frame_buffer[row], 0, STORE_STRIDE);
+    }
+}
+
 uint8_t *scanout_row(uint16_t y) {
     if (y >= FB_HEIGHT) {
         return pixel_base(0);
@@ -289,7 +330,7 @@ uint8_t scanout_hpad(void) {
     return (uint8_t)(h_delay_words * 16u);
 }
 
-uint8_t scanout_vbp(void) {
+uint8_t __no_inline_not_in_flash_func(scanout_vbp)(void) {
     return v_back_porch;
 }
 
@@ -361,7 +402,20 @@ static void rebuild_line_table(uint8_t delay_words, uint8_t v_bp) {
         line_ptrs[n] = porch;
     }
     for (int y = 0; y < h; y++) {
-        line_ptrs[v_bp + y] = (const uint32_t *)(frame_buffer[y] + byte_off);
+        const uint8_t *ext = NULL;
+        if (ext_live.rows != NULL && y >= (int)ext_live.y0) {
+            uint16_t rel = (uint16_t)(y - (int)ext_live.y0);
+            if (rel < ext_live.nrows) {
+                ext = ext_live.rows + (uint32_t)rel * ext_live.stride;
+            }
+        }
+        if (ext != NULL) {
+            line_ptrs[v_bp + y] = (const uint32_t *)(ext + byte_off);
+        } else if (ext_live.rows != NULL) {
+            line_ptrs[v_bp + y] = blank_src(byte_off);
+        } else {
+            line_ptrs[v_bp + y] = (const uint32_t *)(frame_buffer[y] + byte_off);
+        }
     }
     const int tail = v_bp + h;
     for (int n = 0; n < v_fp; n++) {
@@ -383,7 +437,17 @@ static void apply_suffix(uint8_t delay_words) {
     dma_channel_set_trans_count(suffix_chan, 0, false);
 }
 
+static void publish_external(void) {
+    if (!ext_dirty) {
+        return;
+    }
+    __dmb();
+    ext_live = ext_pend;
+    ext_dirty = false;
+}
+
 static void apply_timing(uint8_t delay_words, uint8_t v_bp) {
+    publish_external();
     rebuild_line_table(delay_words, v_bp);
     dma_channel_set_trans_count(data_chan, dma_words(delay_words), false);
     apply_suffix(delay_words);
@@ -392,6 +456,7 @@ static void apply_timing(uint8_t delay_words, uint8_t v_bp) {
 static void pio_rewind_irq(void) {
     if (pio_interrupt_get(pio_crt, PIO_IRQ_REWIND)) {
         pio_interrupt_clear(pio_crt, PIO_IRQ_REWIND);
+        rewind_count++;
         if (timing_dirty) {
             apply_timing(h_delay_words, v_back_porch);
             timing_dirty = false;
@@ -640,6 +705,33 @@ void scanout_sm_instr(uint16_t instr[3]) {
 
 void scanout_reset_pio(void) {
     scanout_set_mode(video_mode);
+}
+
+uint32_t scanout_rewinds(void) {
+    return rewind_count;
+}
+
+void scanout_set_external(const uint8_t *rows, uint16_t stride,
+                          uint16_t dma_bytes, uint16_t y0, uint16_t nrows) {
+    ExtPic next = {0};
+
+    if (rows != NULL) {
+        uint limit = mode_132() ? 1530u : 1024u;
+        if (((uintptr_t)rows & 3u) != 0 || (stride & 3u) != 0 ||
+            (dma_bytes & 3u) != 0 || dma_bytes < 4u ||
+            (dma_bytes / 4u) * 16u >= limit) {
+            return;
+        }
+        next.rows = rows;
+        next.stride = stride;
+        next.dma_bytes = dma_bytes;
+        next.y0 = y0;
+        next.nrows = nrows;
+    }
+    ext_pend = next;
+    __dmb();
+    ext_dirty = true;
+    timing_dirty = true;
 }
 
 void scanout_init(PIO pio) {

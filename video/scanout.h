@@ -58,8 +58,21 @@ void scanout_set_frame_pixel(uint16_t line, uint16_t x, PixelColor color);
 /* Show frame_buffer[line] on that scan line, and clock the horizontal porch. */
 void scanout_code_blanking(bool on);
 void scanout_clear(PixelColor color);
+/* Horizontal pad in front of every stored row, in bytes. External pictures
+ * use the same prefix so a/d nudge still starts inside the row. */
+#define SCANOUT_H_PAD_BYTES 20
+/* Active lines [y0, y0+nrows) are DMA'd from `rows` (SRAM or flash).
+ * Each row is `stride` bytes, 4-byte aligned, and starts with
+ * SCANOUT_H_PAD_BYTES of black. The transfer is `dma_bytes` from that pad.
+ * NULL restores the SRAM framebuffer. Applied on the next vertical rewind. */
+void scanout_set_external(const uint8_t *rows, uint16_t stride,
+                          uint16_t dma_bytes, uint16_t y0, uint16_t nrows);
+/* Vertical rewinds since scanout_init. The picture IRQ increments this. */
+uint32_t scanout_rewinds(void);
 void scanout_fill_line(uint16_t y, PixelColor color);
 void scanout_scroll(uint16_t lines);
+/* Move [y, y+height) up by `lines` pixels. Rows above y stay put. */
+void scanout_scroll_band(uint16_t y, uint16_t height, uint16_t lines);
 uint8_t *scanout_row(uint16_t y);
 uint16_t scanout_store_bytes(void);
 uint8_t scanout_hpad(void);

@@ -14,6 +14,8 @@ The pattern firmware (`crt_pattern`) is the service tool: sync-squares, crosshat
 
 **Still open:** which personality to implement first after the glass TTY is HIL-green.
 
+Pictures and a framed host session are [`apps/vtty`](../apps/vtty/) (`crt_vtty`), not this UF2. Text there still uses this cell grid. A picture is a flash bitmap named by id.
+
 ## Architecture
 
 ```text

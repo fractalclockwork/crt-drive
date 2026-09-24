@@ -3,9 +3,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+void vtty_checkpoint(void);
 
 #define STBTT_STATIC
 #define STBTT_assert(x) ((void)0)
+/* RP2040 has no FPU. The default float rasterizer does not finish a glyph
+ * before the stall watchdog. Version 1 fills each scanline in fixed point. */
+#define STBTT_RASTERIZER_VERSION 1
+#define STBTT_SCANLINE_CHECKPOINT() vtty_checkpoint()
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
@@ -25,17 +30,27 @@ static int descent;
 static int line_gap;
 static uint8_t glyph_bits[GLYPH_MAX_H * GLYPH_MAX_W];
 
+/* The requested em height is a whole number of pixels. Horizontal scale stays
+ * the glass stretch, so a stem is not forced onto a second integer grid. */
+static int snap_px(float px) {
+    int n = (int)(px + 0.5f);
+    if (n < 1) {
+        n = 1;
+    }
+    return n;
+}
+
 static void font_update_scale(void) {
     uint32_t fill_w = scanout_mode_78() ? 226u : 225u;
     uint32_t fill_h = scanout_mode_78() ? 157u : 170u;
     uint16_t w = scanout_width();
     uint16_t h = scanout_height();
+    int y_px = snap_px(size_px);
+    y_scale = stbtt_ScaleForPixelHeight(&font_info, (float)y_px);
     if (h == 0 || fill_w == 0) {
-        y_scale = 1.0f;
-        x_scale = 1.0f;
+        x_scale = y_scale;
         return;
     }
-    y_scale = stbtt_ScaleForPixelHeight(&font_info, size_px);
     x_scale = y_scale * ((float)w * (float)fill_h) / ((float)h * (float)fill_w);
 }
 
@@ -53,10 +68,11 @@ void font_init(void) {
 }
 
 void font_set_size(float px_height) {
-    if (px_height < 6.0f) {
-        px_height = 6.0f;
+    int px = snap_px(px_height);
+    if (px < 6) {
+        px = 6;
     }
-    size_px = px_height;
+    size_px = (float)px;
     if (font_ready) {
         font_update_scale();
     }
@@ -106,25 +122,16 @@ static int glyph_advance(int glyph) {
     return (int)(adv * x_scale + 0.5f);
 }
 
+/* Text is normal or bold. A dim request is drawn normal. Coverage under the
+ * cutoff is off; everything else is the one requested ink. */
 static PixelColor coverage_color(uint8_t a, PixelColor want) {
-    PixelColor ink;
-    if (a < 32u) {
+    if (want == PIXEL_OFF || a < 32u) {
         return PIXEL_OFF;
     }
-    if (a < 96u) {
-        ink = PIXEL_DIM;
-    } else if (a < 192u) {
-        ink = PIXEL_NORMAL;
-    } else {
-        ink = PIXEL_BOLD;
+    if (want == PIXEL_BOLD) {
+        return PIXEL_BOLD;
     }
-    if (want == PIXEL_DIM) {
-        return PIXEL_DIM;
-    }
-    if (want == PIXEL_NORMAL && ink == PIXEL_BOLD) {
-        return PIXEL_NORMAL;
-    }
-    return ink;
+    return PIXEL_NORMAL;
 }
 
 int font_draw_codepoint(int x, int y, uint32_t cp, PixelColor color) {
@@ -149,10 +156,13 @@ int font_draw_codepoint(int x, int y, uint32_t cp, PixelColor color) {
     }
 
     memset(glyph_bits, 0, (size_t)gw * (size_t)gh);
+    vtty_checkpoint();
     stbtt_MakeGlyphBitmapSubpixel(&font_info, glyph_bits, gw, gh, gw,
                                   x_scale, y_scale, 0.0f, 0.0f, glyph);
+    vtty_checkpoint();
 
     for (int row = 0; row < gh; row++) {
+        vtty_checkpoint();
         int py = y + y0 + row;
         if (py < 0) {
             continue;

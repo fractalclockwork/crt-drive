@@ -83,11 +83,12 @@ Each application is its own CMake project and UF2. `make build` with no `APP` is
 | `pattern` | `crt_pattern` | Six analog-setup drawings on the same four modes. |
 | `term` | `crt_term` | Glass TTY. Boots 78 Hz 80-column. Host bytes are the session. |
 | `demos` | `crt_demos` | Phosphor reel (starfield, radar, Lissajous, XOR, wireframe, text). |
+| `vtty` | `crt_vtty` | Video TTY. Live text on USB; pictures live in the top 512 KB of flash and are shown by id. |
 | `hello` | `hello_pico` | USB bring-up. LED and CDC ping. No CRT pins. |
 
 The terminal keeps a character grid and blits a 7×10 cell font into the framebuffer ([terminal-plan.md](terminal-plan.md)). The reel fades 2-bit pixels in place (`11` → `10` → `01` → `00`) so trails read on a short-persistence phosphor ([demo-plan.md](demo-plan.md)). A separate TrueType path in [`font/`](../font/) scales an em from the measured millimeters per pixel so type is square on this glass.
 
-USB CDC is the control port (`tools/monitor.py`, `make monitor`). The running image prints a banner; the host script follows that banner. Pattern keys, scene keys, and TTY bytes are different dialects, so a measure session does not type into the glass TTY.
+USB CDC is the control port (`tools/monitor.py`, `make monitor`). The running image prints a banner; the host script follows that banner. Pattern keys, scene keys, TTY bytes, and the vtty frame (`tools/vtty.py`) are different dialects, so a measure session does not type into the glass TTY.
 
 ## HIL
 

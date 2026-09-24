@@ -41,8 +41,13 @@ _autosave-*
 *.lck
 
 # --- Python ---
+.venv/
 **/__pycache__/
 *.py[cod]
+
+# Rick frames (regenerate with tools/pack_rick.py, or `make build APP=rick`)
+apps/rick/rick_frames.pack
+apps/rick/frames.h
 
 # Indian Head intermediate rasters (regenerate with tools/pack_indian_head.py)
 assets/indian_head/render_*.png

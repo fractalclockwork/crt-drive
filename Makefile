@@ -7,6 +7,8 @@
 	term-build term-flash term-monitor term-test \
 	demos-build demos-flash demos-monitor demos-test \
 	beam-build beam-flash beam-monitor beam-test \
+	vtty-build vtty-flash vtty-monitor vtty-test \
+	rick-build rick-flash rick-monitor rick-test \
 	cross60-build cross60-flash cross60-monitor cross60-test \
 	hello-build hello-flash hello-monitor hello-test \
 	camera camera-check \
@@ -20,9 +22,9 @@ help:
 	@echo "crt-drive RP2040 toolchain (Docker on this Dev-Host)"
 	@echo "  Verbs (default APP=cross60 → apps/cross60, crt_cross60):"
 	@echo "    make build / rebuild / flash / test"
-	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, beam, hello"
-	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos | APP=beam   make test APP=hello"
-	@echo "  Aliases: pattern-*  term-*  demos-*  beam-*  cross60-*  hello-*   (build, flash, monitor, test)"
+	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, beam, vtty, rick, hello"
+	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos | APP=beam | APP=vtty | APP=rick   make test APP=hello"
+	@echo "  Aliases: pattern-*  term-*  demos-*  beam-*  vtty-*  rick-*  cross60-*  hello-*   (build, flash, monitor, test)"
 	@echo "  make camera           — live C310 view and framing-pattern overlay"
 	@echo "  make camera-check    — same view; exit 0 only when the raster is fully framed"
 	@echo "  make image / smoke / pico-discover / shell / shell-usb / picotool-info"
@@ -124,6 +126,30 @@ beam-monitor:
 
 beam-test:
 	$(MAKE) test APP=beam
+
+vtty-build:
+	$(MAKE) build APP=vtty
+
+vtty-flash:
+	$(MAKE) flash APP=vtty
+
+vtty-monitor:
+	$(MAKE) monitor APP=vtty
+
+vtty-test:
+	$(MAKE) test APP=vtty
+
+rick-build:
+	$(MAKE) build APP=rick
+
+rick-flash:
+	$(MAKE) flash APP=rick
+
+rick-monitor:
+	$(MAKE) monitor APP=rick
+
+rick-test:
+	$(MAKE) test APP=rick
 
 cross60-build:
 	$(MAKE) build APP=cross60

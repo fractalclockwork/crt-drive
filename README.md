@@ -39,6 +39,8 @@ make flash          # load crt_cross60
 make monitor        # USB CDC; follows whichever app is running
 make build APP=pattern
 make build APP=term # glass TTY
+make build APP=vtty # text session and flash pictures
+uv sync             # Dev-Host .venv; Pillow for tools/vtty.py images
 make build APP=demos
 make help           # all targets
 ```

@@ -60,6 +60,10 @@ else ifeq ($(APP),demos)
   CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DDEMO_IMAGE_ID=$(IMAGE_ID),)
 else ifeq ($(APP),beam)
   CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DBEAM_IMAGE_ID=$(IMAGE_ID),)
+else ifeq ($(APP),vtty)
+  CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DVTTY_IMAGE_ID=$(IMAGE_ID),)
+else ifeq ($(APP),rick)
+  CMAKE_IMAGE_ID := $(if $(strip $(IMAGE_ID)),-DRICK_IMAGE_ID=$(IMAGE_ID),)
 else
   CMAKE_IMAGE_ID :=
 endif
@@ -86,7 +90,7 @@ help:
 	@echo "  make flash          — picotool load $(UF2)"
 	@echo "  make monitor        — USB CDC; omit APP to follow the running firmware banner"
 	@echo "  make test           — unique digest + flash + HIL (APP=cross60 default; APP=hello for bring-up)"
-	@echo "  make APP=pattern|term|demos|beam build / flash / test"
+	@echo "  make APP=pattern|term|demos|beam|vtty|rick build / flash / test"
 	@echo "  make smoke / build-images / pico-discover / shell / shell-usb / picotool-info"
 	@echo "  PICO_BOARD=$(PICO_BOARD)  APP=$(APP)  CMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE)"
 	@echo "See ../docs/toolchains.md"
@@ -112,6 +116,9 @@ smoke: build-images
 	$(COMPOSE) run --rm --no-deps pico-dev bash -lc 'set -euo pipefail; arm-none-eabi-gcc --version; cmake --version; ninja --version; test -n "$$PICO_SDK_PATH"; test -f "$$PICO_SDK_PATH/pico_sdk_init.cmake"; echo "PICO_SDK_PATH=$$PICO_SDK_PATH"; picotool_out=$$(picotool version 2>&1); printf "%s\n" "$$picotool_out"; if printf "%s\n" "$$picotool_out" | grep -qi "without USB support"; then echo "picotool was built without libusb/USB support" >&2; exit 1; fi'
 
 build: build-images
+ifeq ($(APP),rick)
+	python3 $(REPO_ROOT)/tools/pack_rick.py $(REPO_ROOT)/apps/rick/rick_frames.pack $(REPO_ROOT)/apps/rick/frames.h
+endif
 ifeq ($(APP),hello)
 	$(COMPOSE) run --rm --no-deps \
 		$(if $(strip $(IMAGE_ID)),-e HELLO_IMAGE_ID="$(IMAGE_ID)",) \
@@ -123,10 +130,15 @@ else
 		$(if $(filter term,$(APP)),-e TERM_IMAGE_ID="$(IMAGE_ID)",) \
 		$(if $(filter demos,$(APP)),-e DEMO_IMAGE_ID="$(IMAGE_ID)",) \
 		$(if $(filter beam,$(APP)),-e BEAM_IMAGE_ID="$(IMAGE_ID)",) \
+		$(if $(filter rick,$(APP)),-e RICK_IMAGE_ID="$(IMAGE_ID)",) \
+		$(if $(filter vtty,$(APP)),-e VTTY_IMAGE_ID="$(IMAGE_ID)",) \
 		pico-dev bash -lc 'set -euo pipefail; cmake -S $(APP_SRC) -B $(APP_BUILD) -GNinja -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) -DPICO_BOARD=$(PICO_BOARD) $(CMAKE_IMAGE_ID); ninja -C $(APP_BUILD) $(APP_TARGET)'
 endif
 
 rebuild: build-images
+ifeq ($(APP),rick)
+	python3 $(REPO_ROOT)/tools/pack_rick.py $(REPO_ROOT)/apps/rick/rick_frames.pack $(REPO_ROOT)/apps/rick/frames.h
+endif
 ifeq ($(APP),hello)
 	$(COMPOSE) run --rm --no-deps pico-dev bash -lc 'set -euo pipefail; rm -rf $(HELLO_BUILD_DIR); cmake -S /workspace/hello_pico -B $(HELLO_BUILD_DIR) -GNinja -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) -DPICO_BOARD=$(PICO_BOARD); ninja -C $(HELLO_BUILD_DIR)'
 else

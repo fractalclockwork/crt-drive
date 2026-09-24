@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""USB CDC monitor for crt-drive firmware apps (pattern, term, demos, beam, hello_pico)."""
+"""USB CDC monitor for crt-drive firmware apps (pattern, term, demos, beam, rick, hello_pico)."""
 
 from __future__ import annotations
 
@@ -44,6 +44,11 @@ HELP = {
         "m 80/132  r 60/78  ? status  q quit"
     ),
     "hello": "hello_pico: p ping  q quit",
+    "vtty": "vtty: uv run python tools/vtty.py (text, show, put, demo); q quit",
+    "rick": (
+        "rick: plays at the gif delay, swaps in vertical blank  "
+        "n next  r 60/78  a/d H  w/s V  0 reset  ? status  q quit"
+    ),
 }
 
 HIL_TERM_LINE = "Hello café\r\n".encode("utf-8")
@@ -129,6 +134,10 @@ def detect_app(line: str) -> str | None:
         return "cross60"
     if line.startswith("crt-drive hello_pico"):
         return "hello"
+    if line.startswith("crt-vtty"):
+        return "vtty"
+    if line.startswith("crt-rick"):
+        return "rick"
     return None
 
 
@@ -245,6 +254,20 @@ def hil_beam(fd: int, _line: str, timeout_s: float, digest: str) -> int:
     raise SystemExit("timed out waiting for crt-beam line sample")
 
 
+def hil_vtty(fd: int, _line: str, timeout_s: float, _digest: str) -> int:
+    from vtty_proto import TYPE_SHOW, TYPE_TEXT, Hunt, transact
+
+    hunt = Hunt()
+    ack = transact(fd, hunt, timeout_s, TYPE_TEXT, "Hello\r\n".encode())
+    if ack.a != 0 or ack.b != 1:
+        raise SystemExit(f"expected cursor 0,1 after Hello, got {ack.a},{ack.b}")
+    ack = transact(fd, hunt, timeout_s, TYPE_SHOW, b"\x00\x00\x00\x00\x00\x00")
+    if ack.a != 128 or ack.b != 64:
+        raise SystemExit(f"expected linked card 128x64, got {ack.a}x{ack.b}")
+    print("crt-vtty monitor: ok", flush=True)
+    return 0
+
+
 def hil_cross60(_fd: int, line: str, _timeout_s: float, _digest: str) -> int:
     if not line.startswith("crt-cross60"):
         raise SystemExit(f"expected crt-cross60 banner, got {line!r}")
@@ -269,6 +292,25 @@ def hil_hello(fd: int, line: str, timeout_s: float, digest: str) -> int:
     raise SystemExit("timed out waiting for pong")
 
 
+def hil_rick(fd: int, _line: str, timeout_s: float, digest: str) -> int:
+    os.write(fd, b"?")
+    for nxt in read_lines(fd, timeout_s):
+        if not nxt:
+            continue
+        print(f"rx: {nxt}", flush=True)
+        if not nxt.startswith("crt-rick digest="):
+            continue
+        if not digest_ok(nxt, digest):
+            raise SystemExit(
+                f"status digest mismatch: got {nxt!r}, expected digest={digest}"
+            )
+        if "frame=" not in nxt:
+            raise SystemExit(f"expected frame= in {nxt!r}")
+        print("crt-rick monitor: ok", flush=True)
+        return 0
+    raise SystemExit("timed out waiting for crt-rick status")
+
+
 HIL = {
     "pattern": hil_pattern,
     "term": hil_term,
@@ -276,6 +318,8 @@ HIL = {
     "beam": hil_beam,
     "cross60": hil_cross60,
     "hello": hil_hello,
+    "vtty": hil_vtty,
+    "rick": hil_rick,
 }
 
 
@@ -320,6 +364,10 @@ def interactive(fd: int, forced_app: str | None) -> int:
                 ch = os.read(stdin_fd, 1)
                 if not ch or ch == b"\x03":
                     break
+                if app == "vtty":
+                    if ch in (b"q", b"Q"):
+                        break
+                    continue
                 if app != "term" and ch in (b"q", b"Q"):
                     break
                 os.write(fd, ch)
@@ -333,7 +381,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", default=os.environ.get("PICO_PORT", ""))
     parser.add_argument("--app", default=os.environ.get("MONITOR_APP", ""),
-                        help="force dialect: pattern, term, demos, beam, cross60, hello")
+                        help="force dialect: pattern, term, demos, beam, cross60, hello, vtty, rick")
     parser.add_argument("--digest", default=os.environ.get("IMAGE_ID", ""))
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument(
@@ -350,7 +398,7 @@ def main() -> int:
     forced = args.app.strip() or None
     if forced and forced not in HELP:
         raise SystemExit(
-            f"unknown --app {forced!r} (pattern, term, demos, beam, cross60, hello)"
+            f"unknown --app {forced!r} (pattern, term, demos, beam, cross60, hello, vtty, rick)"
         )
     digest = args.digest.strip()
     port = wait_port(args.port or None, args.timeout)
