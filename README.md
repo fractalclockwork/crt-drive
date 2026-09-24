@@ -15,8 +15,9 @@ The first target is the Link MC5 terminal (Wyse WY-120 architecture). A Raspberr
 | [Firmware plan](docs/firmware-plan.md) | Phased PIO / DMA / framebuffer build, open choices |
 | [Test patterns](docs/test-pattern-design.md) | `cross60` HIL record (keep); six 78 Hz drawings still on `APP=pattern` |
 | [Terminal emulator](docs/terminal-plan.md) | Glass TTY (`apps/term`, `make build APP=term`) |
+| [Video TTY](docs/vtty.md) | Host session (`apps/vtty`, `tools/vtty.py`, weather page) |
 | [Phosphor demos](docs/demo-plan.md) | Attract reel (`apps/demos`, `make build APP=demos`) |
-| [Firmware apps](apps/) | Separate CMake projects: cross60 (default), pattern, term, demos |
+| [Firmware apps](apps/) | Separate CMake projects: cross60 (default), pattern, term, demos, vtty, rick |
 | [Toolchains](docs/toolchains.md) | Dev-Host Docker image, volume mount, USB flash (no gateway) |
 | [KiCad project](docs/kicad/crt-drive/) | Pico carrier / level-shift protoboard (schematic + jumper layout) |
 | [Injector power](docs/kicad/power_supply.md) | +5 V, VSYS Schottky, AHCT buffer rail |
@@ -39,8 +40,9 @@ make flash          # load crt_cross60
 make monitor        # USB CDC; follows whichever app is running
 make build APP=pattern
 make build APP=term # glass TTY
-make build APP=vtty # text session and flash pictures
+make build APP=vtty # host session; usage in docs/vtty.md
 uv sync             # Dev-Host .venv; Pillow for tools/vtty.py images
+make vtty-start     # weather, news, zodiac; make vtty-stop frees the serial node
 make build APP=demos
 make help           # all targets
 ```

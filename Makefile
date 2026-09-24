@@ -7,7 +7,7 @@
 	term-build term-flash term-monitor term-test \
 	demos-build demos-flash demos-monitor demos-test \
 	beam-build beam-flash beam-monitor beam-test \
-	vtty-build vtty-flash vtty-monitor vtty-test \
+	vtty-build vtty-flash vtty-monitor vtty-test vtty-start vtty-stop vtty-status \
 	rick-build rick-flash rick-monitor rick-test \
 	cross60-build cross60-flash cross60-monitor cross60-test \
 	hello-build hello-flash hello-monitor hello-test \
@@ -25,6 +25,9 @@ help:
 	@echo "    make monitor          — USB CDC; banner-detects cross60, pattern, term, demos, beam, vtty, rick, hello"
 	@echo "  Other apps: make flash APP=pattern | APP=term | APP=demos | APP=beam | APP=vtty | APP=rick   make test APP=hello"
 	@echo "  Aliases: pattern-*  term-*  demos-*  beam-*  vtty-*  rick-*  cross60-*  hello-*   (build, flash, monitor, test)"
+	@echo "  make vtty-start       — host page on the glass (HOST=weather)"
+	@echo "  make vtty-stop        — stop that page and free the Pico serial node"
+	@echo "  make vtty-status"
 	@echo "  make camera           — live C310 view and framing-pattern overlay"
 	@echo "  make camera-check    — same view; exit 0 only when the raster is fully framed"
 	@echo "  make image / smoke / pico-discover / shell / shell-usb / picotool-info"
@@ -49,6 +52,7 @@ shell-usb:
 	$(MAKE) -C docker shell-usb
 
 flash:
+	@tools/vtty_host.sh stop --quiet
 	$(MAKE) -C docker flash APP=$(APP)
 
 # Bare monitor does not pass APP, so the host script reads the running firmware banner.
@@ -72,6 +76,7 @@ IMAGE_ID ?=
 TEST_ID ?= $(shell date +%s)-$(shell git rev-parse --short=8 HEAD 2>/dev/null || echo unknown)
 
 test:
+	@tools/vtty_host.sh stop --quiet
 	$(MAKE) pico-discover
 	@if ! lsusb -d 2e8a:000a >/dev/null 2>&1 && ! lsusb -d 2e8a:0003 >/dev/null 2>&1; then \
 		echo "HIL skip: no Pico on USB (2e8a:000a / 2e8a:0003)"; \
@@ -138,6 +143,18 @@ vtty-monitor:
 
 vtty-test:
 	$(MAKE) test APP=vtty
+
+# HOST is the tools/<name>.py page that owns the vtty serial node. Default weather.
+HOST ?= weather
+
+vtty-start:
+	tools/vtty_host.sh start $(HOST)
+
+vtty-stop:
+	tools/vtty_host.sh stop
+
+vtty-status:
+	tools/vtty_host.sh status
 
 rick-build:
 	$(MAKE) build APP=rick

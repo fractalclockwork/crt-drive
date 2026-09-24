@@ -5,7 +5,7 @@
 #   make build APP=term        # apps/term → crt_term
 #   make build APP=demos       # apps/demos → crt_demos
 #   make build APP=beam        # apps/beam → crt_beam (beam-line update tests)
-#   make build APP=vtty        # apps/vtty → crt_vtty (text session, flash pictures)
+#   make build APP=vtty        # apps/vtty → crt_vtty (host session; docs/vtty.md)
 #   make build APP=rick        # apps/rick → crt_rick (rick.gif, 2 bpp, DMA from flash)
 #   make monitor               # USB CDC; follows whichever app is running
 #   make test                  # HIL for APP=cross60 (default); APP=pattern|term|demos|beam|vtty|rick|hello

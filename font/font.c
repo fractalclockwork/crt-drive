@@ -3,7 +3,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-void vtty_checkpoint(void);
+
+/* crt_vtty replaces this with the stall watchdog. Pattern and demos link the
+ * same file and have no watchdog, so the default is a no-op. */
+__attribute__((weak)) void vtty_checkpoint(void) {}
 
 #define STBTT_STATIC
 #define STBTT_assert(x) ((void)0)

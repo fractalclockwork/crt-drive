@@ -272,7 +272,7 @@ Pitch used for the round frame is the lit 1968 × 504 raster on this MC5, 214 mm
 ## Load order
 
 1. Init clock, PIO, and pins (phases 1–3).
-2. Call one `generate_*` so `frame_buffer` is non-zero where the pattern needs light (boot: sync-squares).
+2. Call one `generate_*` so `frame_buffer` is non-zero where the pattern needs light (boot: indian-head).
 3. Start the DMA loop (phase 4). CDC keys or BOOTSEL rewrite the same buffer while the previous frame finishes; a torn frame during the fill is acceptable.
 
 On the bench, BOOTSEL cycles patterns with no host. On the Dev-Host, `make monitor` (or any USB CDC terminal) selects a pattern by key; a breakpoint or `gdb` peek at `frame_buffer` is enough to prove packing before the CRT is connected.

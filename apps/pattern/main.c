@@ -58,8 +58,8 @@ typedef enum {
     PATTERN_PIXEL_CODE
 } PatternId;
 
-static const char *pattern_name = "sync-squares";
-static PatternId current_pattern = PATTERN_SYNC_SQUARES;
+static const char *pattern_name = "indian-head";
+static PatternId current_pattern = PATTERN_INDIAN_HEAD;
 
 static const uint8_t glyph_h[GLYPH_HEIGHT] = {
     0b1000001,
@@ -544,7 +544,7 @@ int main(void) {
     scanout_init(pio0);
     stdio_init_all();
     font_init();
-    apply_pattern(PATTERN_PIXEL_CODE);
+    apply_pattern(current_pattern);
     print_pattern_help();
 
     absolute_time_t next_banner = make_timeout_time_ms(BANNER_MS);
